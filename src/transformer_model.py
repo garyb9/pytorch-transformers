@@ -45,8 +45,10 @@ class PositionalEmbeddings(nn.Module):
         # Apply cos to odd positions
         pe[:, 1::2] = torch.cos(position * div_term)
 
-        pe = pe.unsqueeze(1)  # Tensor of shape (1, seq_len, d_model)
+        pe = pe.unsqueeze(1)  # Tensor of shape (1, seq_len, d_model
+
+        self.register_buffer('pe', pe)
 
     def forward(self, x):
-        # multiply by embeddings by dimension, refer to paper 3.4
-        return self.embedding(x) * math.sqrt(self.d_model)
+        x = x + (self.pe[:, :x.shape[1], :]).requires_grad_(False)
+        return self.dropout(x)
