@@ -3,6 +3,29 @@ This project is designed for experimentation of the Transformer architecture usi
 
 Note: This project is strictly for educational and experimental purposes. Nothing here is intended for production use. Please use this code responsibly and ethically.
 
+## Architecture
+![Transformer Architecture](docs/transformer-architecture.png)
+
+The Transformer is a state-of-the-art deep learning model used for various natural language processing tasks. It consists of two main components: the encoder and the decoder.
+
+The encoder processes the input sequence by applying self-attention mechanisms, which calculate the importance of each word in the context of the entire input sequence. This self-attention is performed using multi-head attention, which means that it considers multiple aspects of the input simultaneously. The math behind self-attention involves calculating weighted sums of the input tokens based on their relevance to each other.
+
+The decoder, on the other hand, generates the output sequence by also employing self-attention, but it additionally uses cross-attention to focus on relevant parts of the encoder's output. Cross-attention allows the model to understand how different parts of the input sequence influence the generation of the output.
+
+Both the encoder and decoder consist of multiple layers, and the final prediction is made by applying fully connected layers and softmax functions. The Transformer's architecture, with its multi-head attention and layer-wise feedforward networks, has proven highly effective for a wide range of NLP tasks.
+
+![Transformer Architecture](docs/attention.png)
+
+1. Query (Q): The query is a representation of a specific word in the input sequence that we want to focus on. For example, if we're processing the word "apple" in the input, "apple" would be the query.
+
+2. Key (K): The key represents the words in the input sequence and helps determine the relevance of each word to the query. Each word in the input has an associated key.
+
+3. Value (V): The value represents the information contained in the words of the input sequence. The value is used to compute the weighted sum that the model assigns to each word based on its relevance to the query.
+
+The self-attention mechanism involves calculating a weighted sum of values, where the weights are determined by the similarity between the query and the keys. The similarity between the query and keys is computed using a dot product, and then it is scaled and passed through a softmax function to ensure that the attention weights sum up to 1. This weighted sum of values becomes the output for the word at the query position, reflecting its context with respect to the other words in the sequence.
+
+In multi-head attention, multiple sets of query, key, and value projections are employed in parallel. Each head learns to focus on different aspects of the input sequence, allowing the model to capture diverse patterns and relationships within the data. The results from each head are concatenated and linearly transformed to obtain the final output of the self-attention layer.
+
 ## Getting Started
 Before you start exploring and experimenting with the Transformer architecture, you'll need to set up your environment. Here's how to get started:
 
