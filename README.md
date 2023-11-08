@@ -4,6 +4,7 @@ This project is designed for experimentation of the Transformer architecture usi
 Note: This project is strictly for educational and experimental purposes. Nothing here is intended for production use. Please use this code responsibly and ethically.
 
 ## Architecture
+### Transformer Architecture
 ![Transformer Architecture](docs/transformer-architecture.png)
 
 The Transformer is a state-of-the-art deep learning model used for various natural language processing tasks. It consists of two main components: the encoder and the decoder.
@@ -14,7 +15,8 @@ The decoder, on the other hand, generates the output sequence by also employing 
 
 Both the encoder and decoder consist of multiple layers, and the final prediction is made by applying fully connected layers and softmax functions. The Transformer's architecture, with its multi-head attention and layer-wise feedforward networks, has proven highly effective for a wide range of NLP tasks.
 
-![Transformer Architecture](docs/attention.png)
+### Attention Mechanism 
+![Attention mechanism](docs/attention.png)
 
 1. Query (Q): The query is a representation of a specific word in the input sequence that we want to focus on. For example, if we're processing the word "apple" in the input, "apple" would be the query.
 
