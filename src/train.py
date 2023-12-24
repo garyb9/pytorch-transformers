@@ -53,7 +53,18 @@ def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_
     return decoder_input.squeeze(0)
 
 
-def run_validation(model, validation_ds, tokenizer_src, tokenizer_tgt, max_len, device, print_msg, global_step, writer, num_examples=2):
+def run_validation(
+    model,
+    validation_ds,
+    tokenizer_src,
+    tokenizer_tgt,
+    max_len,
+    device,
+    print_msg,
+    global_step,
+    writer,
+    num_examples=2
+):
     model.eval()
     count = 0
 
@@ -193,7 +204,18 @@ def get_model(config, vocab_src_len, vocab_tgt_len):
 
 def train_model(config):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f'Using device: {device}')
+    print("Using device:", device)
+    if (device == 'cuda'):
+        print(f"Device name: {torch.cuda.get_device_name(device.index)}")
+        print(
+            f"Device memory: {torch.cuda.get_device_properties(device.index).total_memory / 1024 ** 3} GB")
+    elif (device == 'mps'):
+        print(f"Device name: <mps>")
+    else:
+        print("NOTE: If you have a GPU, consider using it for training.")
+        print("      On a Windows machine with NVidia GPU, check this video: https://www.youtube.com/watch?v=GMSjDTU8Zlc")
+        print("      On a Mac machine, run: pip3 install --pre torch torchvision torchaudio torchtext --index-url https://download.pytorch.org/whl/nightly/cpu")
+    device = torch.device(device)
 
     Path(config['model_folder']).mkdir(parents=True, exist_ok=True)
 
@@ -219,10 +241,12 @@ def train_model(config):
         '[PAD]'), label_smoothing=0.1).to(device)
 
     for epoch in range(initial_epoch, config['num_epochs']):
+        torch.cuda.empty_cache()
         model.train()
         batch_iterator = tqdm(
-            train_dataloader, desc=f'Processing epoch: {epoch:02d}')
+            train_dataloader, desc=f"Processing Epoch {epoch:02d}")
         for batch in batch_iterator:
+
             encoder_input = batch['encoder_input'].to(device)
             decoder_input = batch['decoder_input'].to(device)
             encoder_mask = batch['encoder_mask'].to(device)
@@ -252,6 +276,10 @@ def train_model(config):
             optimizer.zero_grad()
 
             global_step += 1
+
+        # Run validation at the end of every epoch
+        run_validation(model, val_dataloader, tokenizer_src, tokenizer_tgt,
+                       config['seq_len'], device, lambda msg: batch_iterator.write(msg), global_step, writer)
 
         model_filename = get_weights_file_path(config, f'{epoch:02d}')
         torch.save({
