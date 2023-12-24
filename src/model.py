@@ -49,7 +49,8 @@ class PositionalEmbeddings(nn.Module):
 
         self.register_buffer('pe', pe)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x):
+        # (batch, seq_len, d_model)
         x = x + (self.pe[:, :x.shape[1], :]).requires_grad_(False)
         return self.dropout(x)
 
@@ -250,18 +251,18 @@ class Transformer(nn.Module):
         super().__init__()
         self.encoder = encoder
         self.decoder = decoder
-        self.src_embed: src_embed
-        self.tgt_embed: tgt_embed
-        self.src_pos: src_pos
-        self.tgt_pos: tgt_pos
-        self.projection_layer: projection_layer
+        self.src_embed = src_embed
+        self.tgt_embed = tgt_embed
+        self.src_pos = src_pos
+        self.tgt_pos = tgt_pos
+        self.projection_layer = projection_layer
 
     def encode(self, src, src_mask):
         src = self.src_embed(src)
         src = self.src_pos(src)
         return self.encode(src, src_mask)
 
-    def encode(self, encoder_output, src_mask, tgt, tgt_mask):
+    def decode(self, encoder_output, src_mask, tgt, tgt_mask):
         tgt = self.tgt_embed(tgt)
         tgt = self.tgt_pos(tgt)
         return self.decoder(tgt, encoder_output, src_mask, tgt_mask)

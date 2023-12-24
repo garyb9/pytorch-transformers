@@ -79,7 +79,7 @@ class BilingualDataset(Dataset):
             # (1, 1, Seq_len)
             "encoder_mask": (encoder_input != self.pad_token).unsqueeze(0).int(),
             # (1, Seq_len) & (1, Seq_len, Seq_len)
-            "decoder_mask": (decoder_input != self.pad_token).unsqueeze(0).int() & causal_mask(decoder_input),
+            "decoder_mask": (decoder_input != self.pad_token).unsqueeze(0).int() & causal_mask(decoder_input.size(0)),
             "label": label,
             "src_text": src_text,
             "tgt_text": tgt_text
