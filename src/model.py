@@ -59,8 +59,10 @@ class LayerNormalization(nn.Module):
     def __init__(self, eps: float = 10**-6) -> None:
         super().__init__()
         self.eps = eps  # epsilon to compensate for small variance
-        self.alpha = nn.Parameter(torch.ones[1])  # Multiplied
-        self.bias = nn.Parameter(torch.ones[1])  # Added
+        # alpha is a learnable parameter
+        self.alpha = nn.Parameter(torch.ones(1))
+        # bias is a learnable parameter
+        self.bias = nn.Parameter(torch.zeros(1))
 
     def forward(self, x: torch.Tensor):
         mean = x.mean(dim=-1, keepdim=True)
@@ -314,7 +316,7 @@ def build_transformer(
         decoder_feed_forward_block = FeedForwardBlock(
             d_model, d_ff, dropout
         )
-        decoder_block = EncoderBlock(
+        decoder_block = DecoderBlock(
             decoder_self_attention_block, decoder_cross_attention_block, decoder_feed_forward_block, dropout
         )
         decoder_blocks.append(decoder_block)
