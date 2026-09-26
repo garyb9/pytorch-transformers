@@ -1,0 +1,38 @@
+seed: 42
+
+tokenizer:
+  vocab_size: 32000
+  sample_size: 4000000
+
+filters:
+  seq_len: 256
+  max_length_ratio: 3.0
+
+own_eval:
+  dev_fraction: 0.0007
+  test_fraction: 0.0007
+
+sources:
+  - id: jesc
+    hub_id: nntsuzu/JESC
+    config: null
+    split: train
+    src_field: translation.en
+    tgt_field: translation.ja
+    weight: 0.7
+    max_examples: null
+    license: cc-by-4.0
+    attribution: "JESC (Pryzant et al., 2018), CC BY-SA 4.0"
+
+  - id: opus100
+    hub_id: Helsinki-NLP/opus-100
+    config: en-ja
+    split: train
+    validation_split: validation
+    test_split: test
+    src_field: translation.en
+    tgt_field: translation.ja
+    weight: 0.3
+    max_examples: null
+    license: unknown
+    attribution: "OPUS-100 (Zhang et al., 2020), research use"
