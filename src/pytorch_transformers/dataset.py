@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +17,7 @@ def causal_mask(size: int) -> torch.Tensor:
     return torch.tril(torch.ones(size, size, dtype=torch.bool))
 
 
-class TranslationDataset(Dataset):
+class TranslationDataset(Dataset[dict[str, torch.Tensor]]):
     def __init__(
         self,
         shards: Sequence[str | Path],
@@ -41,6 +41,10 @@ class TranslationDataset(Dataset):
 
     def __len__(self) -> int:
         return len(self._index)
+
+    def __iter__(self) -> Iterator[dict[str, torch.Tensor]]:
+        for index in range(len(self)):
+            yield self[index]
 
     def _load(self, index: int) -> dict[str, Any]:
         shard_index, offset = self._index[index]

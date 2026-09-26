@@ -46,6 +46,9 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+[tool.ruff.lint.per-file-ignores]
+"src/pytorch_transformers/cli.py" = ["B008"]
+
 [tool.mypy]
 files = ["src"]
 python_version = "3.12"

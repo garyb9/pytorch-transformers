@@ -138,3 +138,16 @@ def load_training_checkpoint(
     if optimizer is not None:
         optimizer.load_state_dict(torch.load(directory / "optimizer.pt", map_location="cpu"))
     return metadata
+
+
+def load_run_dir(run_dir: str | Path) -> tuple[Transformer, dict[str, Any], ModelConfig]:
+    from .model import build_transformer
+
+    directory = Path(run_dir)
+    metadata = json.loads((directory / "metadata.json").read_text(encoding="utf-8"))
+    config = ModelConfig.from_dict(metadata["model_config"])
+    config.tie_embeddings = bool(metadata.get("tie_embeddings", False))
+    model = build_transformer(config)
+    state = load_file(str(directory / "weights.safetensors"))
+    load_into_model(model, state, config.tie_embeddings)
+    return model, metadata, config
