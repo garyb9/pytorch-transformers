@@ -4,7 +4,7 @@ use anyhow::Result;
 use candle_core::{DType, Device};
 use candle_nn::VarBuilder;
 use pytorch_transformers_rs::{
-    beam_search, greedy_decode, ModelConfig, TokenizerWrapper, Transformer,
+    beam_search, greedy_decode, BeamParams, ModelConfig, TokenizerWrapper, Transformer,
 };
 use serde::Deserialize;
 
@@ -68,9 +68,11 @@ fn beam_matches_python() -> Result<()> {
         &inputs.source_ids,
         inputs.bos_id,
         inputs.eos_id,
-        inputs.max_len,
-        3,
-        0.6,
+        &BeamParams {
+            max_len: inputs.max_len,
+            beam_size: 3,
+            length_penalty: 0.6,
+        },
         &device,
     )?;
     assert_eq!(output, inputs.expected_beam);

@@ -55,20 +55,25 @@ fn normalised_score(tokens: &[u32], log_prob: f64, penalty: f64) -> f64 {
     log_prob / (tokens.len() as f64).powf(penalty)
 }
 
+pub struct BeamParams {
+    pub max_len: usize,
+    pub beam_size: usize,
+    pub length_penalty: f64,
+}
+
 pub fn beam_search(
     model: &Transformer,
     source_ids: &[u32],
     bos_id: u32,
     eos_id: u32,
-    max_len: usize,
-    beam_size: usize,
-    length_penalty: f64,
+    params: &BeamParams,
     device: &Device,
 ) -> Result<Vec<u32>> {
+    let max_len = params.max_len.min(model.max_tgt_len()?);
+    let beam_size = params.beam_size.max(1);
+    let length_penalty = params.length_penalty;
     let (src, _) = source_tensor(model, source_ids, bos_id, eos_id, device)?;
     let encoder_output = model.encode(&src, None, false)?;
-    let max_len = max_len.min(model.max_tgt_len()?);
-    let beam_size = beam_size.max(1);
 
     let mut beams: Vec<(Vec<u32>, f64, bool)> = vec![(vec![bos_id], 0.0, false)];
     let mut completed: Vec<(Vec<u32>, f64)> = Vec::new();

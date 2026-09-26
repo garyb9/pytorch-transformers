@@ -6,8 +6,8 @@ use candle_core::{DType, Device};
 use candle_nn::VarBuilder;
 use clap::{Parser, Subcommand};
 use pytorch_transformers_rs::{
-    beam_search, bench_translate, greedy_decode, percentile, train_model, BenchParams, ModelConfig,
-    TokenizerWrapper, TrainOptions, Transformer,
+    beam_search, bench_translate, greedy_decode, percentile, train_model, BeamParams, BenchParams,
+    ModelConfig, TokenizerWrapper, TrainOptions, Transformer,
 };
 
 #[derive(Parser)]
@@ -140,7 +140,18 @@ fn main() -> Result<()> {
                 }
                 let ids = tokenizer.encode(&line)?;
                 let output = if beam > 1 {
-                    beam_search(&model, &ids, bos, eos, max_len, beam, 0.6, &device)?
+                    beam_search(
+                        &model,
+                        &ids,
+                        bos,
+                        eos,
+                        &BeamParams {
+                            max_len,
+                            beam_size: beam,
+                            length_penalty: 0.6,
+                        },
+                        &device,
+                    )?
                 } else {
                     greedy_decode(&model, &ids, bos, eos, max_len, &device)?
                 };
