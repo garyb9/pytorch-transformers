@@ -19,3 +19,6 @@ tokenizers = "0.23.2"
 [features]
 default = []
 cuda = ["candle-core/cuda"]
+
+[dev-dependencies]
+tempfile = "3.27.0"

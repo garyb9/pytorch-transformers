@@ -5,7 +5,9 @@ use anyhow::Result;
 use candle_core::{DType, Device};
 use candle_nn::VarBuilder;
 use clap::{Parser, Subcommand};
-use pytorch_transformers_rs::{greedy_decode, ModelConfig, TokenizerWrapper, Transformer};
+use pytorch_transformers_rs::{
+    greedy_decode, train_model, ModelConfig, TokenizerWrapper, TrainOptions, Transformer,
+};
 
 #[derive(Parser)]
 #[command(
@@ -34,6 +36,30 @@ enum Command {
         max_len: usize,
         #[arg(long, default_value = "auto")]
         device: String,
+    },
+    Train {
+        #[arg(long)]
+        config: PathBuf,
+        #[arg(long)]
+        data_dir: PathBuf,
+        #[arg(long)]
+        tokenizer: PathBuf,
+        #[arg(long, default_value = "train")]
+        split: String,
+        #[arg(long, default_value = "en-ja")]
+        direction: String,
+        #[arg(long, default_value_t = 64)]
+        seq_len: usize,
+        #[arg(long, default_value_t = 8)]
+        batch_size: usize,
+        #[arg(long, default_value_t = 100)]
+        steps: usize,
+        #[arg(long, default_value_t = 1e-3)]
+        lr: f64,
+        #[arg(long, default_value = "auto")]
+        device: String,
+        #[arg(long)]
+        out: PathBuf,
     },
 }
 
@@ -92,6 +118,43 @@ fn main() -> Result<()> {
                 let output = greedy_decode(&model, &ids, bos, eos, max_len, &device)?;
                 println!("{}", tokenizer.decode(&output)?);
             }
+        }
+        Command::Train {
+            config,
+            data_dir,
+            tokenizer,
+            split,
+            direction,
+            seq_len,
+            batch_size,
+            steps,
+            lr,
+            device,
+            out,
+        } => {
+            let device = resolve_device(&device)?;
+            let model_config = ModelConfig::from_json_file(&config)?;
+            let tokenizer = TokenizerWrapper::from_file(&tokenizer)?;
+            let options = TrainOptions {
+                data_dir,
+                split,
+                direction,
+                seq_len,
+                batch_size,
+                steps,
+                lr,
+                label_smoothing: 0.1,
+            };
+            let loss = train_model(
+                &model_config,
+                &options,
+                &device,
+                tokenizer.pad_id()?,
+                tokenizer.bos_id()?,
+                tokenizer.eos_id()?,
+                &out,
+            )?;
+            println!("final loss {loss:.4}");
         }
     }
     Ok(())
