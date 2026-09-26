@@ -18,7 +18,16 @@ pub struct TrainOptions {
     pub batch_size: usize,
     pub steps: usize,
     pub lr: f64,
+    pub warmup_steps: usize,
     pub label_smoothing: f64,
+}
+
+pub fn scheduled_lr(step: usize, warmup_steps: usize, base_lr: f64) -> f64 {
+    let warmup = warmup_steps.max(1) as f64;
+    let current = (step + 1) as f64;
+    let peak = warmup.powf(-0.5);
+    let scale = current.powf(-0.5).min(current * warmup.powf(-1.5));
+    base_lr * scale / peak
 }
 
 pub fn label_smoothed_cross_entropy(
@@ -79,6 +88,10 @@ pub fn train_model(
     let mut rng = rand::rng();
     let mut last_loss = f32::NAN;
     for step in 0..options.steps {
+        optimizer.set_params(ParamsAdamW {
+            lr: scheduled_lr(step, options.warmup_steps, options.lr),
+            ..Default::default()
+        });
         let indices: Vec<usize> = (0..options.batch_size)
             .map(|_| rng.random_range(0..dataset.len()))
             .collect();

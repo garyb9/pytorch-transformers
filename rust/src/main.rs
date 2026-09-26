@@ -57,6 +57,8 @@ enum Command {
         steps: usize,
         #[arg(long, default_value_t = 1e-3)]
         lr: f64,
+        #[arg(long, default_value_t = 100)]
+        warmup_steps: usize,
         #[arg(long, default_value = "auto")]
         device: String,
         #[arg(long)]
@@ -148,6 +150,7 @@ fn main() -> Result<()> {
             batch_size,
             steps,
             lr,
+            warmup_steps,
             device,
             out,
         } => {
@@ -162,6 +165,7 @@ fn main() -> Result<()> {
                 batch_size,
                 steps,
                 lr,
+                warmup_steps,
                 label_smoothing: 0.1,
             };
             let loss = train_model(

@@ -113,9 +113,9 @@ cd rust && cargo fmt && cargo clippy --all-targets -- -D warnings && cargo test
 
 ## Status / roadmap
 
-- Done: model, tokenizer, two-source data, training, evaluation, CLI, Rust inference + training, parity + benchmark.
+- Done: model, tokenizer, two-source data, training, evaluation, CLI, Rust inference + training (with warmup + inverse-sqrt LR), parity + benchmark.
 - Reserved: mixed-direction model (shared vocab and language tags are already in place).
-- Planned: streaming `prepare-data` for full-corpus runs, Rust warmup LR schedule and dropout parity, beam search in Rust.
+- Planned: streaming `prepare-data` for full-corpus runs, Rust dropout parity, beam search in Rust.
 
 ## License
 

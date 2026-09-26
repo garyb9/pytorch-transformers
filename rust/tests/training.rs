@@ -1,6 +1,16 @@
 use anyhow::Result;
 use candle_core::Device;
-use pytorch_transformers_rs::{train_model, ModelConfig, TrainOptions};
+use pytorch_transformers_rs::{scheduled_lr, train_model, ModelConfig, TrainOptions};
+
+#[test]
+fn scheduled_lr_peaks_at_warmup_then_decays() {
+    let peak = (0..10)
+        .map(|step| scheduled_lr(step, 10, 1e-3))
+        .fold(0.0f64, f64::max);
+    assert!((peak - 1e-3).abs() < 1e-4, "peak {peak}");
+    assert!(scheduled_lr(0, 10, 1e-3) < peak);
+    assert!(scheduled_lr(20, 10, 1e-3) < peak);
+}
 
 #[test]
 fn training_smoke_writes_checkpoint() -> Result<()> {
@@ -50,6 +60,7 @@ fn training_smoke_writes_checkpoint() -> Result<()> {
         batch_size: 4,
         steps: 20,
         lr: 1e-2,
+        warmup_steps: 5,
         label_smoothing: 0.1,
     };
     let out_dir = dir.path().join("run");

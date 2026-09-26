@@ -12,4 +12,4 @@ pub use dataset::{make_batch, TranslationDataset};
 pub use infer::greedy_decode;
 pub use model::{sinusoidal, src_fill_mask, tgt_fill_mask, Transformer};
 pub use tokenizer::TokenizerWrapper;
-pub use train::{train_model, TrainOptions};
+pub use train::{scheduled_lr, train_model, TrainOptions};
