@@ -12,9 +12,11 @@ from pytorch_transformers.data import (
     decontaminate,
     dedup,
     interleave,
+    load_csv_pairs,
     normalize,
     prepare_data,
     read_shard,
+    source_available,
     text_blocked_hashes,
     tokenize_and_filter,
     write_shards,
@@ -123,6 +125,12 @@ def test_prepare_data_end_to_end_with_fake_loader(tmp_path, monkeypatch) -> None
 
     monkeypatch.setattr("pytorch_transformers.data.load_hf_pairs", fake_loader)
 
+    csv_path = tmp_path / "jlpt.csv"
+    lines = ["english,japanese,level"]
+    for index in range(20):
+        lines.append(f"study sentence {index},勉強 {index},N{index % 5 + 1}")
+    csv_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
     sources = [
         SourceSpec(
             id="jesc",
@@ -143,11 +151,21 @@ def test_prepare_data_end_to_end_with_fake_loader(tmp_path, monkeypatch) -> None
             tgt_field="translation.ja",
             weight=0.3,
         ),
+        SourceSpec(
+            id="jlpt",
+            format="csv",
+            path=str(csv_path),
+            src_field="english",
+            tgt_field="japanese",
+            level_field="level",
+            weight=0.1,
+            eval_fraction=0.5,
+        ),
     ]
     config = DataConfig(
         sources=sources,
         seed=7,
-        filters=FilterConfig(seq_len=16, max_length_ratio=3.0),
+        filters=FilterConfig(seq_len=32, max_length_ratio=3.0),
         own_dev_fraction=0.25,
         own_test_fraction=0.25,
     )
@@ -156,9 +174,44 @@ def test_prepare_data_end_to_end_with_fake_loader(tmp_path, monkeypatch) -> None
     manifest = prepare_data(config, tokenizer_path, out_dir, max_examples=60, shard_size=8)
 
     assert manifest["counts"]["train"] > 0
+    assert manifest["counts"]["jlpt-eval"] > 0
     assert manifest["tokenizer_sha256"] is not None
-    assert manifest["weights"] == {"jesc": 0.7, "opus100": 0.3}
+    assert manifest["weights"] == {"jesc": 0.7, "opus100": 0.3, "jlpt": 0.1}
     assert (out_dir / "manifest.json").exists()
     assert (out_dir / "stats.json").exists()
     assert Path(out_dir / manifest["shards"]["train"][0]).exists()
     assert manifest["sources"][1]["id"] == "opus100"
+    eval_records = read_shard(out_dir / manifest["shards"]["jlpt-eval"][0])
+    assert all("level" in record for record in eval_records)
+
+
+def test_load_csv_pairs_parses_fields_and_levels(tmp_path) -> None:
+    csv_path = tmp_path / "pairs.csv"
+    csv_path.write_text(
+        "english,japanese,level\nHello,こんにちは,N5\nThanks,ありがとう,N4\n",
+        encoding="utf-8",
+    )
+    spec = SourceSpec(
+        id="jlpt",
+        format="csv",
+        path=str(csv_path),
+        src_field="english",
+        tgt_field="japanese",
+        level_field="level",
+        weight=1.0,
+    )
+    pairs = list(load_csv_pairs(spec))
+    assert [(pair.src, pair.tgt, pair.level) for pair in pairs] == [
+        ("Hello", "こんにちは", "N5"),
+        ("Thanks", "ありがとう", "N4"),
+    ]
+    assert source_available(spec)
+    missing = SourceSpec(
+        id="missing",
+        format="csv",
+        path=str(tmp_path / "nope.csv"),
+        src_field="a",
+        tgt_field="b",
+        weight=1.0,
+    )
+    assert not source_available(missing)

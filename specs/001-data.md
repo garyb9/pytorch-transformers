@@ -7,6 +7,13 @@
 | `opus100` | `Helsinki-NLP/opus-100` | `en-ja` | `translation.en`, `translation.ja` | train/validation/test | 1M / 2k / 2k | unknown (research) | mixed web+books |
 | `jesc` | `nntsuzu/JESC` | default | `translation.en`, `translation.ja` | train only (raw corpus) | 2,801,388 | CC BY-SA 4.0 | conversational subtitles |
 | `jesc-official` | `nlp.stanford.edu/projects/jesc/data/split.tar.gz` | — | parallel TSV | train 2,797,388 / dev 2000 / test 2000 | — | CC BY-SA 4.0 | same, official splits |
+| `jlpt-grammar` | local CSV (`nihongo-go/.../n*.examples.csv`) | — | `english`, `japanese`, `level` | ~6,700 | unknown | JLPT study sentences |
+| `jlpt-core2000` | local CSV (`nihongo-go/.../Japanese_Core_2000...csv`) | — | `sentence_english`, `expression` | ~2,000 | unknown | everyday sentences |
+| `jlpt-grammar6500` | local CSV (`nihongo-go/.../...6500...csv`) | — | `example_english`, `example_japanese` | ~6,500 | unknown | grammar examples (mostly deduped) |
+
+Local CSV sources are declared with `format: csv`, a `path` (glob allowed), `src_field`/`tgt_field`,
+an optional `level_field`, `optional: true` (skipped when absent), and `eval_fraction` for a
+level-stratified held-out domain eval (`<id>-eval`).
 
 The HF `jesc` mirror is the raw 2019-de-duplicated corpus (matches the official "Raw"
 count). Official dev/test are used as an **external benchmark only**.

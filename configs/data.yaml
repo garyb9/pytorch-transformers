@@ -36,3 +36,37 @@ sources:
     max_examples: null
     license: unknown
     attribution: "OPUS-100 (Zhang et al., 2020), research use"
+
+  - id: jlpt-grammar
+    format: csv
+    path: ../nihongo-go/data/jlptsensei/grammar/n*.examples.csv
+    src_field: english
+    tgt_field: japanese
+    level_field: level
+    weight: 0.012
+    eval_fraction: 0.1
+    optional: true
+    license: unknown
+    attribution: "JLPT Sensei grammar examples (local nihongo-go corpus)"
+
+  - id: jlpt-core2000
+    format: csv
+    path: ../nihongo-go/data/vocab/export/Japanese_Core_2000_2k_-_Sorted_w_Audio.csv
+    src_field: sentence_english
+    tgt_field: expression
+    weight: 0.004
+    eval_fraction: 0.1
+    optional: true
+    license: unknown
+    attribution: "Japanese Core 2000 (Anki export)"
+
+  - id: jlpt-grammar6500
+    format: csv
+    path: ../nihongo-go/data/grammar/export/Japanese_Grammar_6500_Example_sentences_for_all_850_GrPoints.csv
+    src_field: example_english
+    tgt_field: example_japanese
+    level_field: level
+    weight: 0.004
+    optional: true
+    license: unknown
+    attribution: "JLPT grammar 6500 example sentences (Anki export)"

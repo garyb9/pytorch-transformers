@@ -5,9 +5,9 @@ model_folder: weights
 run_name: jp-en-bounded
 seq_len: 256
 batch_size: 32
-num_epochs: 2
+num_epochs: 1
 lr: 5.0e-4
-warmup_steps: 500
+warmup_steps: 1000
 label_smoothing: 0.1
 grad_clip: 1.0
 d_model: 512
@@ -20,7 +20,7 @@ tie_embeddings: false
 lang_embedding: false
 amp: true
 num_workers: 4
-val_interval: 1000
+val_interval: 2000
 val_batches: 8
 seed: 42
 resume: null

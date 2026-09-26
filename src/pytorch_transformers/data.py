@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import glob
 import hashlib
 import json
 import random
@@ -34,6 +36,7 @@ class Pair:
     src: str
     tgt: str
     origin: str
+    level: str | None = None
 
 
 @dataclass(slots=True)
@@ -42,20 +45,26 @@ class TokenizedPair:
     src_ids: list[int]
     tgt_ids: list[int]
     origin: str
+    level: str | None = None
 
 
 @dataclass(slots=True)
 class SourceSpec:
     id: str
-    hub_id: str
-    split: str
     src_field: str
     tgt_field: str
     weight: float
+    hub_id: str = ""
+    split: str = "train"
+    format: str = "hf"
+    path: str | None = None
     config: str | None = None
     max_examples: int | None = None
     validation_split: str | None = None
     test_split: str | None = None
+    level_field: str | None = None
+    eval_fraction: float = 0.0
+    optional: bool = False
     license: str | None = None
     attribution: str | None = None
 
@@ -130,6 +139,37 @@ def load_hf_pairs(
         yield Pair(index, src, tgt, spec.id)
 
 
+def load_csv_pairs(spec: SourceSpec, limit: int | None = None) -> Iterator[Pair]:
+    paths = sorted(glob.glob(spec.path or ""))
+    if not paths:
+        raise FileNotFoundError(f"no files match {spec.path!r} for source {spec.id!r}")
+    index = 0
+    for path in paths:
+        with Path(path).open(encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle):
+                if limit is not None and index >= limit:
+                    return
+                src = str(row.get(spec.src_field) or "")
+                tgt = str(row.get(spec.tgt_field) or "")
+                level = str(row.get(spec.level_field) or "") if spec.level_field else None
+                yield Pair(index, src, tgt, spec.id, level or None)
+                index += 1
+
+
+def load_source_pairs(
+    spec: SourceSpec, split: str | None = None, limit: int | None = None
+) -> Iterator[Pair]:
+    if spec.format == "csv":
+        return load_csv_pairs(spec, limit)
+    return load_hf_pairs(spec, split=split, limit=limit)
+
+
+def source_available(spec: SourceSpec) -> bool:
+    if spec.format != "csv":
+        return True
+    return bool(glob.glob(spec.path or ""))
+
+
 def tokenize_and_filter(
     pairs: Iterable[Pair],
     tokenizer: TokenizerWrapper,
@@ -146,7 +186,7 @@ def tokenize_and_filter(
         smaller = min(len(src_ids), len(tgt_ids))
         if max(len(src_ids), len(tgt_ids)) / smaller > config.max_length_ratio:
             continue
-        yield TokenizedPair(pair.pair_id, src_ids, tgt_ids, pair.origin)
+        yield TokenizedPair(pair.pair_id, src_ids, tgt_ids, pair.origin, pair.level)
 
 
 def dedup(pairs: Iterable[TokenizedPair]) -> Iterator[TokenizedPair]:
@@ -255,6 +295,8 @@ def write_shards(
                     "origin": item.origin,
                     "pair_id": item.pair_id,
                 }
+                if item.level is not None:
+                    record["level"] = item.level
                 handle.write(json.dumps(record, ensure_ascii=False) + "\n")
         shards.append(path.name)
         buffer.clear()
@@ -300,16 +342,20 @@ def prepare_data(
         return min(limits) if limits else None
 
     blocked: set[str] = set()
-    stats: dict[str, Any] = {"sources": {}, "dropped": {}}
+    stats: dict[str, Any] = {"sources": {}, "skipped": []}
+    eval_pairs: dict[str, list[TokenizedPair]] = {}
 
-    opus = config.source("opus100")
-    for split in (opus.validation_split, opus.test_split):
-        if split:
-            blocked |= set(pair_text_hashes(load_hf_pairs(opus, split=split), tokenizer))
+    active = [spec for spec in config.sources if source_available(spec)]
+    stats["skipped"] = [spec.id for spec in config.sources if spec not in active]
+
+    for spec in active:
+        for split in (spec.validation_split, spec.test_split):
+            if split:
+                blocked |= set(
+                    pair_text_hashes(load_source_pairs(spec, split=split), tokenizer)
+                )
 
     jesc = config.source("jesc")
-    own_dev: list[TokenizedPair] = []
-    own_test: list[TokenizedPair] = []
 
     def jesc_bucket(pair: Pair) -> str:
         return bucket_for(
@@ -320,18 +366,21 @@ def prepare_data(
             config.own_test_fraction,
         )
 
-    for pair in load_hf_pairs(jesc, limit=bounded(jesc)):
+    jesc_own: dict[str, list[TokenizedPair]] = {"dev": [], "test": []}
+    for pair in load_source_pairs(jesc, limit=bounded(jesc)):
         bucket = jesc_bucket(pair)
         if bucket == "train":
             continue
         for tokenized in tokenize_and_filter([pair], tokenizer, config.filters):
-            if bucket == "dev":
-                own_dev.append(tokenized)
-            else:
-                own_test.append(tokenized)
+            jesc_own[bucket].append(tokenized)
             blocked.add(ids_hash(tokenized.src_ids))
             blocked.add(ids_hash(tokenized.tgt_ids))
-    stats["sources"]["jesc"] = {"own_dev": len(own_dev), "own_test": len(own_test)}
+    eval_pairs["jesc-own-dev"] = jesc_own["dev"]
+    eval_pairs["jesc-own-test"] = jesc_own["test"]
+    stats["sources"]["jesc"] = {
+        "own_dev": len(jesc_own["dev"]),
+        "own_test": len(jesc_own["test"]),
+    }
 
     if jesc_official_dir is not None:
         official = Path(jesc_official_dir)
@@ -340,27 +389,56 @@ def prepare_data(
             if candidate.exists():
                 blocked |= set(pair_text_hashes(read_tsv_pairs(candidate), tokenizer))
 
+    def eval_bucket(spec: SourceSpec, pair: Pair) -> str:
+        origin = f"{spec.id}:{pair.level or ''}"
+        bucket = bucket_for(origin, pair.pair_id, config.seed, 0.0, spec.eval_fraction)
+        return "eval" if bucket == "test" else "train"
+
+    for spec in active:
+        if spec.eval_fraction <= 0:
+            continue
+        held: list[TokenizedPair] = []
+        for pair in load_source_pairs(spec, limit=bounded(spec)):
+            if eval_bucket(spec, pair) != "eval":
+                continue
+            for tokenized in tokenize_and_filter([pair], tokenizer, config.filters):
+                held.append(tokenized)
+                blocked.add(ids_hash(tokenized.src_ids))
+                blocked.add(ids_hash(tokenized.tgt_ids))
+        eval_pairs[f"{spec.id}-eval"] = held
+        stats["sources"][spec.id] = {"eval": len(held)}
+
     def jesc_train_pairs() -> Iterator[Pair]:
-        for pair in load_hf_pairs(jesc, limit=bounded(jesc)):
+        for pair in load_source_pairs(jesc, limit=bounded(jesc)):
             if jesc_bucket(pair) == "train":
                 yield pair
 
-    opus_train = tokenize_and_filter(
-        load_hf_pairs(opus, limit=bounded(opus)), tokenizer, config.filters
-    )
-    opus_clean = decontaminate(opus_train, blocked)
-    jesc_train = decontaminate(
-        tokenize_and_filter(jesc_train_pairs(), tokenizer, config.filters), blocked
-    )
+    def local_train_pairs(spec: SourceSpec) -> Iterator[Pair]:
+        for pair in load_source_pairs(spec, limit=bounded(spec)):
+            if eval_bucket(spec, pair) == "train":
+                yield pair
 
-    mixed = interleave([(opus_clean, opus.weight), (jesc_train, jesc.weight)], config.seed)
+    streams: list[tuple[Iterable[TokenizedPair], float]] = []
+    for spec in active:
+        if spec.id == "jesc":
+            pairs: Iterable[Pair] = jesc_train_pairs()
+        elif spec.eval_fraction > 0:
+            pairs = local_train_pairs(spec)
+        else:
+            pairs = load_source_pairs(spec, limit=bounded(spec))
+        cleaned = decontaminate(tokenize_and_filter(pairs, tokenizer, config.filters), blocked)
+        streams.append((cleaned, spec.weight))
+
+    mixed = interleave(streams, config.seed)
     deduped = dedup(mixed)
     if max_examples is not None:
         deduped = (pair for index, pair in enumerate(deduped) if index < max_examples)
 
     train_result = write_shards(deduped, directory, "train", shard_size)
-    dev_result = write_shards(iter(own_dev), directory, "jesc-own-dev", shard_size)
-    test_result = write_shards(iter(own_test), directory, "jesc-own-test", shard_size)
+    eval_results = {
+        name: write_shards(iter(pairs), directory, name, shard_size)
+        for name, pairs in eval_pairs.items()
+    }
 
     manifest = {
         "version": 1,
@@ -375,8 +453,7 @@ def prepare_data(
         },
         "counts": {
             "train": train_result.count,
-            "jesc-own-dev": dev_result.count,
-            "jesc-own-test": test_result.count,
+            **{name: result.count for name, result in eval_results.items()},
         },
         "max_lens": {
             "train_src": train_result.max_src_len,
@@ -384,8 +461,7 @@ def prepare_data(
         },
         "shards": {
             "train": train_result.shards,
-            "jesc-own-dev": dev_result.shards,
-            "jesc-own-test": test_result.shards,
+            **{name: result.shards for name, result in eval_results.items()},
         },
         "sources": [
             {

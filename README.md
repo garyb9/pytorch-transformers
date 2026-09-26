@@ -100,8 +100,9 @@ Parity is enforced by tests: Rust logits match Python within `1e-3`, and greedy 
 
 - **JESC** — Japanese–English Subtitle Corpus (Pryzant et al., 2018), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 - **OPUS-100** — Zhang et al., 2020; released for research use.
+- **JLPT study sentences** (optional, local) — grammar examples and Core 2000 sentences from a local `nihongo-go` corpus, mixed at low weight and held out in part as a level-stratified domain eval (`jlpt-grammar-eval`, `jlpt-core2000-eval`). Sources marked `optional: true` are skipped when their paths are absent.
 
-See `specs/001-data.md` for the exact mixing and split policy.
+See `specs/001-data.md` for the exact mixing and split policy. Evaluate the JLPT domain with e.g. `ptx eval weights/en-jp --split jlpt-grammar-eval --direction en-jp`.
 
 ## Development
 
