@@ -308,6 +308,14 @@ impl Transformer {
         Ok(self.tgt_proj.forward(x)?)
     }
 
+    pub fn max_src_len(&self) -> Result<usize> {
+        Ok(self.src_pos.dim(1)?)
+    }
+
+    pub fn max_tgt_len(&self) -> Result<usize> {
+        Ok(self.tgt_pos.dim(1)?)
+    }
+
     pub fn forward(
         &self,
         src: &Tensor,

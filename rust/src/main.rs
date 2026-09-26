@@ -116,7 +116,7 @@ fn main() -> Result<()> {
                 }
                 let ids = tokenizer.encode(&line)?;
                 let output = greedy_decode(&model, &ids, bos, eos, max_len, &device)?;
-                println!("{}", tokenizer.decode(&output)?);
+                println!("{}", tokenizer.decode(&output)?.trim());
             }
         }
         Command::Train {

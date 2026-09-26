@@ -233,6 +233,12 @@ class Transformer(nn.Module):
     def project(self, x: Tensor) -> Tensor:
         return self.tgt_proj(x)
 
+    def max_src_len(self) -> int:
+        return int(self.src_pos.pe.shape[1])
+
+    def max_tgt_len(self) -> int:
+        return int(self.tgt_pos.pe.shape[1])
+
     def forward(
         self,
         src: Tensor,

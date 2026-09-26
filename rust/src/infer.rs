@@ -11,6 +11,9 @@ pub fn greedy_decode(
     max_len: usize,
     device: &Device,
 ) -> Result<Vec<u32>> {
+    let source_limit = model.max_src_len()?.saturating_sub(2);
+    let source_ids = &source_ids[..source_ids.len().min(source_limit)];
+    let max_len = max_len.min(model.max_tgt_len()?);
     let mut source_tokens = vec![bos_id];
     source_tokens.extend_from_slice(source_ids);
     source_tokens.push(eos_id);

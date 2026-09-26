@@ -41,6 +41,8 @@ def greedy_decode(
     max_len: int,
 ) -> list[int]:
     model.eval()
+    source_ids = list(source_ids)[: model.max_src_len() - 2]
+    max_len = min(max_len, model.max_tgt_len())
     src, src_mask = _source_tensor(source_ids, tokenizer, device)
     encoder_output = model.encode(src, src_mask)
     ys = torch.tensor([[tokenizer.bos_id]], dtype=torch.long, device=device)
@@ -66,6 +68,8 @@ def beam_search(
     length_penalty: float = 0.6,
 ) -> list[int]:
     model.eval()
+    source_ids = list(source_ids)[: model.max_src_len() - 2]
+    max_len = min(max_len, model.max_tgt_len())
     src, src_mask = _source_tensor(source_ids, tokenizer, device)
     encoder_output = model.encode(src, src_mask)
 

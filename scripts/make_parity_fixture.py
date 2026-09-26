@@ -41,8 +41,8 @@ def main() -> None:
     config = ModelConfig(
         src_vocab_size=vocab_size,
         tgt_vocab_size=vocab_size,
-        src_seq_len=16,
-        tgt_seq_len=16,
+        src_seq_len=64,
+        tgt_seq_len=64,
         d_model=32,
         n_layers=2,
         n_heads=4,
