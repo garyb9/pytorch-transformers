@@ -8,7 +8,7 @@ from .checkpoints import load_run_dir
 from .dataset import TranslationDataset
 from .metrics import corpus_bleu, corpus_chrf
 from .tokenizer import TokenizerWrapper
-from .translate import content_ids, translate_ids
+from .translate import content_ids, lang_ids_for, translate_ids
 from .utils import resolve_device
 
 
@@ -20,9 +20,11 @@ def evaluate(
     device_name: str = "auto",
     beam: int = 1,
     limit: int | None = None,
+    direction: str | None = None,
 ) -> dict[str, Any]:
     model, metadata, model_config = load_run_dir(run_dir)
-    direction = str(metadata.get("direction", "en-ja"))
+    training_direction = str(metadata.get("direction", "en-ja"))
+    eval_direction = direction or training_direction
     tokenizer_file = tokenizer_path or metadata.get("tokenizer_path") or "tokenizer_shared.json"
     tokenizer = TokenizerWrapper.from_file(tokenizer_file)
 
@@ -32,23 +34,36 @@ def evaluate(
     shards = [Path(data_dir) / name for name in manifest["shards"][split]]
 
     seq_len = model_config.src_seq_len
-    dataset = TranslationDataset(shards, tokenizer, seq_len, direction=direction)
+    dataset = TranslationDataset(
+        shards, tokenizer, seq_len, direction=eval_direction, seed=int(manifest.get("seed", 42))
+    )
     device = resolve_device(device_name)
     model.to(device).eval()
 
+    src_lang, tgt_lang = lang_ids_for(eval_direction)
     hypotheses: list[str] = []
     references: list[str] = []
     for index, item in enumerate(dataset):
         if limit is not None and index >= limit:
             break
         source_ids = content_ids(item["encoder_input"].tolist(), tokenizer)
-        predicted = translate_ids(model, tokenizer, source_ids, device, seq_len, beam=beam)
+        predicted = translate_ids(
+            model,
+            tokenizer,
+            source_ids,
+            device,
+            seq_len,
+            beam=beam,
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
+        )
         hypotheses.append(tokenizer.decode(predicted))
         references.append(tokenizer.decode(content_ids(item["label"].tolist(), tokenizer)))
 
     result: dict[str, Any] = {
         "split": split,
-        "direction": direction,
+        "direction": eval_direction,
+        "trained_direction": training_direction,
         "beam": beam,
         "count": len(hypotheses),
     }

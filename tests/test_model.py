@@ -51,6 +51,10 @@ def expected_state_dict_keys(config: ModelConfig) -> set[str]:
         "tgt_proj.weight",
         "tgt_proj.bias",
     }
+    if not config.tie_embeddings:
+        keys |= {"tgt_embed.weight", "tgt_proj.weight"}
+    if config.lang_embedding:
+        keys.add("lang_embed.weight")
     for i in range(config.n_layers):
         base = f"encoder.layers.{i}"
         keys |= attention_keys(f"{base}.self_attn")
@@ -136,6 +140,35 @@ def test_tie_embeddings_shares_weights() -> None:
     model = build_transformer(config)
     assert model.tgt_embed.weight is model.src_embed.weight
     assert model.tgt_proj.weight is model.src_embed.weight
+
+
+def test_lang_embedding_forward_and_keys() -> None:
+    config = small_config(lang_embedding=True)
+    model = build_transformer(config).eval()
+    assert "lang_embed.weight" in model.state_dict()
+    assert set(model.state_dict()) == expected_state_dict_keys(config)
+
+    src = torch.randint(0, config.src_vocab_size, (3, config.src_seq_len))
+    tgt = torch.randint(0, config.tgt_vocab_size, (3, config.tgt_seq_len))
+    src_lang = torch.zeros(3, dtype=torch.long)
+    tgt_lang = torch.ones(3, dtype=torch.long)
+    logits = model(src, tgt, None, causal_mask(config.tgt_seq_len, batch=3), src_lang, tgt_lang)
+    assert logits.shape == (3, config.tgt_seq_len, config.tgt_vocab_size)
+
+
+def test_lang_embedding_changes_output() -> None:
+    torch.manual_seed(0)
+    config = small_config(lang_embedding=True)
+    model = build_transformer(config).eval()
+    src = torch.randint(0, config.src_vocab_size, (1, config.src_seq_len))
+    tgt = torch.randint(0, config.tgt_vocab_size, (1, config.tgt_seq_len))
+    mask = causal_mask(config.tgt_seq_len, batch=1)
+    zeros = torch.zeros(1, dtype=torch.long)
+    ones = torch.ones(1, dtype=torch.long)
+    with torch.no_grad():
+        first = model(src, tgt, None, mask, zeros, zeros)
+        second = model(src, tgt, None, mask, ones, ones)
+    assert not torch.allclose(first, second)
 
 
 def test_pre_norm_mode_runs_and_backpropagates() -> None:

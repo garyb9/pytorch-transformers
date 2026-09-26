@@ -87,6 +87,29 @@ def test_tied_embeddings_export_and_reload(tmp_path) -> None:
     assert torch.allclose(expected, actual)
 
 
+def test_lang_embedding_export_roundtrip(tmp_path) -> None:
+    config = small_config(lang_embedding=True)
+    model = build_transformer(config).eval()
+    path = tmp_path / "mixed.safetensors"
+    export_safetensors(model, path, config, "mixed")
+
+    from safetensors.torch import load_file
+
+    saved = set(load_file(str(path)))
+    assert saved == expected_keys(config)
+    assert "lang_embed.weight" in saved
+
+    reloaded, _ = load_model(path)
+    reloaded.eval()
+    src, tgt, src_mask, tgt_mask = random_batch(config)
+    src_lang = torch.zeros(2, dtype=torch.long)
+    tgt_lang = torch.ones(2, dtype=torch.long)
+    with torch.no_grad():
+        expected = model(src, tgt, src_mask, tgt_mask, src_lang, tgt_lang)
+        actual = reloaded(src, tgt, src_mask, tgt_mask, src_lang, tgt_lang)
+    assert torch.allclose(expected, actual)
+
+
 def test_training_checkpoint_roundtrip(tmp_path) -> None:
     config = small_config()
     model = build_transformer(config)

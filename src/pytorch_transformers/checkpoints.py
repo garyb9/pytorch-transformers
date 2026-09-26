@@ -23,6 +23,8 @@ def expected_keys(config: ModelConfig) -> set[str]:
     }
     if not config.tie_embeddings:
         keys |= {"tgt_embed.weight", "tgt_proj.weight"}
+    if config.lang_embedding:
+        keys.add("lang_embed.weight")
     for index in range(config.n_layers):
         for prefix in (f"encoder.layers.{index}",):
             for name in ("w_q", "w_k", "w_v", "w_o"):

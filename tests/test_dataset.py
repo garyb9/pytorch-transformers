@@ -5,7 +5,12 @@ import json
 import pytest
 import torch
 
-from pytorch_transformers.dataset import DIRECTIONS, TranslationDataset, causal_mask
+from pytorch_transformers.dataset import (
+    DIRECTIONS,
+    LANG_IDS,
+    TranslationDataset,
+    causal_mask,
+)
 from pytorch_transformers.tokenizer import TokenizerWrapper, train_tokenizer
 
 CORPUS = ["hello world", "the quick brown fox", "こんにちは世界", "日本語のテスト"]
@@ -81,4 +86,23 @@ def test_invalid_direction_rejected(tmp_path, tokenizer: TokenizerWrapper) -> No
 
 
 def test_directions_constant() -> None:
-    assert DIRECTIONS == ("en-ja", "ja-en")
+    assert DIRECTIONS == ("en-ja", "ja-en", "mixed")
+
+
+def test_lang_ids_reflect_direction(tmp_path, tokenizer: TokenizerWrapper) -> None:
+    shard = tmp_path / "train-00000.jsonl"
+    write_shard(shard, tokenizer, [("hello world", "こんにちは世界")])
+    forward = TranslationDataset([shard], tokenizer, seq_len=16, direction="en-ja")[0]
+    backward = TranslationDataset([shard], tokenizer, seq_len=16, direction="ja-en")[0]
+    assert forward["src_lang_id"].item() == LANG_IDS["en"]
+    assert forward["tgt_lang_id"].item() == LANG_IDS["ja"]
+    assert backward["src_lang_id"].item() == LANG_IDS["ja"]
+    assert backward["tgt_lang_id"].item() == LANG_IDS["en"]
+
+
+def test_mixed_direction_uses_both_orientations(tmp_path, tokenizer: TokenizerWrapper) -> None:
+    shard = tmp_path / "train-00000.jsonl"
+    write_shard(shard, tokenizer, [(f"hello world {i}", f"こんにちは {i}") for i in range(12)])
+    dataset = TranslationDataset([shard], tokenizer, seq_len=16, direction="mixed")
+    source_langs = {item["src_lang_id"].item() for item in dataset}
+    assert source_langs == {LANG_IDS["en"], LANG_IDS["ja"]}

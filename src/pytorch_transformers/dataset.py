@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Iterator, Sequence
 from pathlib import Path
@@ -10,11 +11,17 @@ from torch.utils.data import Dataset
 
 from .tokenizer import TokenizerWrapper
 
-DIRECTIONS = ("en-ja", "ja-en")
+DIRECTIONS = ("en-ja", "ja-en", "mixed")
+LANG_IDS = {"en": 0, "ja": 1}
 
 
 def causal_mask(size: int) -> torch.Tensor:
     return torch.tril(torch.ones(size, size, dtype=torch.bool))
+
+
+def mixed_orientation(pair_id: int, seed: int) -> bool:
+    digest = hashlib.sha1(f"{seed}:{pair_id}".encode()).digest()
+    return digest[0] % 2 == 0
 
 
 class TranslationDataset(Dataset[dict[str, torch.Tensor]]):
@@ -24,6 +31,7 @@ class TranslationDataset(Dataset[dict[str, torch.Tensor]]):
         tokenizer: TokenizerWrapper,
         seq_len: int,
         direction: str = "en-ja",
+        seed: int = 42,
     ) -> None:
         if direction not in DIRECTIONS:
             raise ValueError(f"direction must be one of {DIRECTIONS}, got {direction!r}")
@@ -31,6 +39,7 @@ class TranslationDataset(Dataset[dict[str, torch.Tensor]]):
         self.tokenizer = tokenizer
         self.seq_len = seq_len
         self.direction = direction
+        self.seed = seed
         self._index: list[tuple[int, int]] = []
         for shard_index, path in enumerate(self.shards):
             with path.open("rb") as handle:
@@ -60,6 +69,15 @@ class TranslationDataset(Dataset[dict[str, torch.Tensor]]):
         tgt_ids = list(record["tgt"])
         if self.direction == "ja-en":
             src_ids, tgt_ids = tgt_ids, src_ids
+            src_lang, tgt_lang = LANG_IDS["ja"], LANG_IDS["en"]
+        elif self.direction == "mixed":
+            en_to_ja = mixed_orientation(int(record.get("pair_id", index)), self.seed)
+            if not en_to_ja:
+                src_ids, tgt_ids = tgt_ids, src_ids
+            src_lang = LANG_IDS["en"] if en_to_ja else LANG_IDS["ja"]
+            tgt_lang = LANG_IDS["ja"] if en_to_ja else LANG_IDS["en"]
+        else:
+            src_lang, tgt_lang = LANG_IDS["en"], LANG_IDS["ja"]
 
         pad = self.tokenizer.pad_id
         bos = self.tokenizer.bos_id
@@ -92,4 +110,6 @@ class TranslationDataset(Dataset[dict[str, torch.Tensor]]):
             "encoder_mask": encoder_mask,
             "decoder_mask": decoder_mask,
             "label": label,
+            "src_lang_id": torch.tensor(src_lang, dtype=torch.long),
+            "tgt_lang_id": torch.tensor(tgt_lang, dtype=torch.long),
         }

@@ -87,6 +87,7 @@ def eval_command(
     data_dir: Path = typer.Option(Path("data/opus_jesc"), "--data-dir"),
     tokenizer_path: Path | None = typer.Option(None, "--tokenizer"),
     split: str | None = typer.Option(None, "--split"),
+    direction: str | None = typer.Option(None, "--direction"),
     device: str = typer.Option("auto", "--device"),
     beam: int = typer.Option(1, "--beam"),
     limit: int | None = typer.Option(None, "--limit"),
@@ -99,6 +100,7 @@ def eval_command(
         device_name=device,
         beam=beam,
         limit=limit,
+        direction=direction,
     )
     typer.echo(json.dumps(result, indent=2))
 
@@ -109,6 +111,7 @@ def translate_command(
     text: str | None = typer.Option(None, "--text"),
     file: Path | None = typer.Option(None, "--file"),
     tokenizer_path: Path | None = typer.Option(None, "--tokenizer"),
+    direction: str | None = typer.Option(None, "--direction"),
     device: str = typer.Option("auto", "--device"),
     beam: int = typer.Option(1, "--beam"),
     max_len: int = typer.Option(256, "--max-len"),
@@ -118,6 +121,7 @@ def translate_command(
     tokenizer = TokenizerWrapper.from_file(tokenizer_file)
     resolved = resolve_device(device)
     model.to(resolved).eval()
+    active_direction = direction or str(metadata.get("direction", "en-ja"))
 
     if file is not None:
         lines = file.read_text(encoding="utf-8").splitlines()
@@ -128,7 +132,17 @@ def translate_command(
 
     for line in lines:
         if line.strip():
-            typer.echo(translate_text(model, tokenizer, line, resolved, max_len=max_len, beam=beam))
+            typer.echo(
+                translate_text(
+                    model,
+                    tokenizer,
+                    line,
+                    resolved,
+                    max_len=max_len,
+                    beam=beam,
+                    direction=active_direction,
+                )
+            )
 
 
 @app.command("export")

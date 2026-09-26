@@ -111,3 +111,36 @@ def test_train_config_from_yaml_ignores_unknown(tmp_path: Path) -> None:
     config = TrainConfig.from_yaml(path)
     assert config.direction == "ja-en"
     assert config.batch_size == 8
+
+
+def test_mixed_direction_smoke(tmp_path: Path) -> None:
+    _, tokenizer_path, data_dir = make_data(tmp_path)
+    config = TrainConfig(
+        direction="mixed",
+        lang_embedding=True,
+        data_dir=str(data_dir),
+        tokenizer_path=str(tokenizer_path),
+        model_folder=str(tmp_path / "weights"),
+        run_name="mixed",
+        seq_len=16,
+        batch_size=4,
+        num_epochs=3,
+        lr=1e-3,
+        warmup_steps=3,
+        d_model=32,
+        n_layers=1,
+        n_heads=2,
+        d_ff=64,
+        dropout=0.0,
+        num_workers=0,
+        val_interval=0,
+        val_batches=1,
+        amp=False,
+        seed=0,
+    )
+    result = train_model(config, device_name="cpu", max_steps=2)
+    assert result["global_step"] == 2
+    assert (tmp_path / "weights" / "mixed" / "weights.safetensors").exists()
+    _, metadata, _ = load_run_dir(tmp_path / "weights" / "mixed")
+    assert metadata["direction"] == "mixed"
+    assert metadata["tie_embeddings"] is False

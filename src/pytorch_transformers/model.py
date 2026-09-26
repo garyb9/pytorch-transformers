@@ -208,6 +208,7 @@ class Transformer(nn.Module):
         src_pos: PositionalEncoding,
         tgt_pos: PositionalEncoding,
         projection: Projection,
+        lang_embed: nn.Embedding | None = None,
     ) -> None:
         super().__init__()
         self.src_embed = src_embed
@@ -217,9 +218,21 @@ class Transformer(nn.Module):
         self.encoder = encoder
         self.decoder = decoder
         self.tgt_proj = projection
+        self.lang_embed = lang_embed
 
-    def encode(self, src: Tensor, src_mask: Tensor | None = None) -> Tensor:
-        return self.encoder(self.src_pos(self.src_embed(src)), src_mask)
+    def _add_lang(self, x: Tensor, lang_id: Tensor | None) -> Tensor:
+        if self.lang_embed is None or lang_id is None:
+            return x
+        return x + self.lang_embed(lang_id).unsqueeze(1)
+
+    def encode(
+        self,
+        src: Tensor,
+        src_mask: Tensor | None = None,
+        src_lang: Tensor | None = None,
+    ) -> Tensor:
+        x = self._add_lang(self.src_pos(self.src_embed(src)), src_lang)
+        return self.encoder(x, src_mask)
 
     def decode(
         self,
@@ -227,8 +240,10 @@ class Transformer(nn.Module):
         src_mask: Tensor | None,
         tgt: Tensor,
         tgt_mask: Tensor | None = None,
+        tgt_lang: Tensor | None = None,
     ) -> Tensor:
-        return self.decoder(self.tgt_pos(self.tgt_embed(tgt)), encoder_output, src_mask, tgt_mask)
+        x = self._add_lang(self.tgt_pos(self.tgt_embed(tgt)), tgt_lang)
+        return self.decoder(x, encoder_output, src_mask, tgt_mask)
 
     def project(self, x: Tensor) -> Tensor:
         return self.tgt_proj(x)
@@ -245,16 +260,15 @@ class Transformer(nn.Module):
         tgt: Tensor,
         src_mask: Tensor | None = None,
         tgt_mask: Tensor | None = None,
+        src_lang: Tensor | None = None,
+        tgt_lang: Tensor | None = None,
     ) -> Tensor:
-        encoder_output = self.encode(src, src_mask)
-        decoder_output = self.decode(encoder_output, src_mask, tgt, tgt_mask)
+        encoder_output = self.encode(src, src_mask, src_lang)
+        decoder_output = self.decode(encoder_output, src_mask, tgt, tgt_mask, tgt_lang)
         return self.project(decoder_output)
 
 
 def build_transformer(config: ModelConfig) -> Transformer:
-    if config.lang_embedding:
-        raise NotImplementedError("lang_embedding is reserved for the mixed-direction mode")
-
     src_embed = InputEmbedding(config.d_model, config.src_vocab_size)
     tgt_embed = InputEmbedding(config.d_model, config.tgt_vocab_size)
     src_pos = PositionalEncoding(config.d_model, config.src_seq_len, config.dropout)
@@ -286,8 +300,11 @@ def build_transformer(config: ModelConfig) -> Transformer:
     encoder = Encoder(encoder_layers, config.d_model, config.layer_norm_eps)
     decoder = Decoder(decoder_layers, config.d_model, config.layer_norm_eps)
     projection = Projection(config.d_model, config.tgt_vocab_size)
+    lang_embed = nn.Embedding(2, config.d_model) if config.lang_embedding else None
 
-    model = Transformer(encoder, decoder, src_embed, tgt_embed, src_pos, tgt_pos, projection)
+    model = Transformer(
+        encoder, decoder, src_embed, tgt_embed, src_pos, tgt_pos, projection, lang_embed
+    )
 
     if config.tie_embeddings:
         if config.src_vocab_size != config.tgt_vocab_size:

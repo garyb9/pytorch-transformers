@@ -17,7 +17,7 @@ from .dataset import TranslationDataset
 from .metrics import corpus_chrf
 from .model import Transformer, build_transformer, count_parameters
 from .tokenizer import TokenizerWrapper
-from .translate import content_ids, translate_ids
+from .translate import content_ids, lang_ids_for, translate_ids
 from .utils import build_optimizer, build_scheduler, resolve_device, set_seed
 
 logger = logging.getLogger(__name__)
@@ -44,6 +44,7 @@ class TrainConfig:
     dropout: float = 0.1
     residual_mode: str = "post"
     tie_embeddings: bool = False
+    lang_embedding: bool = False
     amp: bool = True
     num_workers: int = 4
     val_interval: int = 1000
@@ -73,6 +74,7 @@ class TrainConfig:
             dropout=self.dropout,
             residual_mode=self.residual_mode,
             tie_embeddings=self.tie_embeddings,
+            lang_embedding=self.lang_embedding or self.direction == "mixed",
         )
 
 
@@ -90,7 +92,9 @@ def build_loader(
     config: TrainConfig,
     shuffle: bool,
 ) -> DataLoader:
-    dataset = TranslationDataset(shards, tokenizer, config.seq_len, direction=config.direction)
+    dataset = TranslationDataset(
+        shards, tokenizer, config.seq_len, direction=config.direction, seed=config.seed
+    )
     return DataLoader(
         dataset,
         batch_size=config.batch_size,
@@ -121,9 +125,15 @@ def run_validation(
     for batch in loader:
         moved = move_batch(batch, device)
         with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=use_amp):
-            encoder_output = model.encode(moved["encoder_input"], moved["encoder_mask"])
+            encoder_output = model.encode(
+                moved["encoder_input"], moved["encoder_mask"], moved["src_lang_id"]
+            )
             decoder_output = model.decode(
-                encoder_output, moved["encoder_mask"], moved["decoder_input"], moved["decoder_mask"]
+                encoder_output,
+                moved["encoder_mask"],
+                moved["decoder_input"],
+                moved["decoder_mask"],
+                moved["tgt_lang_id"],
             )
             logits = model.project(decoder_output)
             loss = loss_fn(logits.reshape(-1, logits.size(-1)), moved["label"].reshape(-1))
@@ -132,7 +142,16 @@ def run_validation(
 
         if len(hypotheses) < val_samples:
             source_ids = content_ids(moved["encoder_input"][0].tolist(), tokenizer)
-            predicted = translate_ids(model, tokenizer, source_ids, device, config.seq_len)
+            src_lang, tgt_lang = lang_ids_for(config.direction)
+            predicted = translate_ids(
+                model,
+                tokenizer,
+                source_ids,
+                device,
+                config.seq_len,
+                src_lang=src_lang,
+                tgt_lang=tgt_lang,
+            )
             hypotheses.append(tokenizer.decode(predicted))
             references.append(tokenizer.decode(content_ids(moved["label"][0].tolist(), tokenizer)))
 
@@ -201,12 +220,15 @@ def train_model(
         for batch in train_loader:
             moved = move_batch(batch, device)
             with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=use_amp):
-                encoder_output = model.encode(moved["encoder_input"], moved["encoder_mask"])
+                encoder_output = model.encode(
+                    moved["encoder_input"], moved["encoder_mask"], moved["src_lang_id"]
+                )
                 decoder_output = model.decode(
                     encoder_output,
                     moved["encoder_mask"],
                     moved["decoder_input"],
                     moved["decoder_mask"],
+                    moved["tgt_lang_id"],
                 )
                 logits = model.project(decoder_output)
                 loss = loss_fn(logits.reshape(-1, logits.size(-1)), moved["label"].reshape(-1))
