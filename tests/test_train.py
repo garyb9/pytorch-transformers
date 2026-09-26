@@ -144,3 +144,80 @@ def test_mixed_direction_smoke(tmp_path: Path) -> None:
     _, metadata, _ = load_run_dir(tmp_path / "weights" / "mixed")
     assert metadata["direction"] == "mixed"
     assert metadata["tie_embeddings"] is False
+
+
+def test_train_writes_and_prunes_snapshots(tmp_path: Path) -> None:
+    _, tokenizer_path, data_dir = make_data(tmp_path)
+    config = TrainConfig(
+        direction="en-jp",
+        data_dir=str(data_dir),
+        tokenizer_path=str(tokenizer_path),
+        model_folder=str(tmp_path / "weights"),
+        run_name="snap",
+        seq_len=16,
+        batch_size=4,
+        num_epochs=5,
+        lr=1e-3,
+        warmup_steps=2,
+        d_model=32,
+        n_layers=1,
+        n_heads=2,
+        d_ff=64,
+        dropout=0.0,
+        num_workers=0,
+        val_interval=0,
+        amp=False,
+        checkpoint_interval=1,
+        snapshot_interval=1,
+        keep_checkpoints=2,
+        seed=0,
+    )
+    result = train_model(config, device_name="cpu", max_steps=4)
+    assert result["global_step"] == 4
+    run_dir = tmp_path / "weights" / "snap"
+    assert (run_dir / "weights.safetensors").exists()
+    assert (run_dir / "metadata.json").exists()
+    snapshots = sorted(path.name for path in run_dir.glob("step-*"))
+    assert snapshots == ["step-00000003", "step-00000004"]
+
+
+def test_train_oom_retries_with_smaller_micro_batch(tmp_path: Path, monkeypatch) -> None:
+    import pytorch_transformers.train as train_mod
+
+    _, tokenizer_path, data_dir = make_data(tmp_path)
+    original = train_mod._forward_loss
+    calls = {"count": 0}
+
+    def flaky_forward_loss(model, batch, loss_fn, use_amp, device):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise torch.cuda.OutOfMemoryError("simulated out of memory")
+        return original(model, batch, loss_fn, use_amp, device)
+
+    monkeypatch.setattr(train_mod, "_forward_loss", flaky_forward_loss)
+    config = TrainConfig(
+        direction="en-jp",
+        data_dir=str(data_dir),
+        tokenizer_path=str(tokenizer_path),
+        model_folder=str(tmp_path / "weights"),
+        run_name="oom",
+        seq_len=16,
+        batch_size=4,
+        num_epochs=2,
+        lr=1e-3,
+        warmup_steps=2,
+        d_model=32,
+        n_layers=1,
+        n_heads=2,
+        d_ff=64,
+        dropout=0.0,
+        num_workers=0,
+        val_interval=0,
+        amp=False,
+        checkpoint_interval=0,
+        snapshot_interval=0,
+        seed=0,
+    )
+    result = train_model(config, device_name="cpu", max_steps=1)
+    assert result["global_step"] == 1
+    assert calls["count"] == 2

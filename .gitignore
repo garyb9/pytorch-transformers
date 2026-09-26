@@ -165,4 +165,4 @@ data/
 bench/results.json
 tokenizer_*.json
 .ruff_cache/
-rust/target/
+rust/target/logs/

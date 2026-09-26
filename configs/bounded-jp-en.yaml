@@ -4,7 +4,7 @@ tokenizer_path: tokenizer_shared.json
 model_folder: weights
 run_name: jp-en-bounded
 seq_len: 256
-batch_size: 32
+batch_size: 24
 num_epochs: 1
 lr: 5.0e-4
 warmup_steps: 1000
@@ -20,6 +20,10 @@ tie_embeddings: false
 lang_embedding: false
 amp: true
 num_workers: 4
+eval_batch_size: 8
+checkpoint_interval: 1000
+snapshot_interval: 5000
+keep_checkpoints: 3
 val_interval: 2000
 val_batches: 8
 seed: 42

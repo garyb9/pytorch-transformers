@@ -15,7 +15,7 @@ Both stacks share one tokenizer (`tokenizer.json`) and one weight format (`safet
 - Shared byte-level BPE tokenizer (works for Japanese without whitespace assumptions).
 - Two-source data pipeline: **JESC** (conversational subtitles) and **OPUS-100** (mixed domain), with deterministic mixing, filtering, dedup, decontamination, and dual-track evaluation.
 - Directional configs for **EN→JA**, **JA→EN**, and a **mixed** direction model using shared language embeddings.
-- Training with warmup + inverse-sqrt LR, label smoothing, AMP, gradient clipping, resume, and best/last checkpoints.
+- Training with warmup + inverse-sqrt LR, label smoothing, AMP, gradient clipping, resume, periodic/pruned step snapshots, best/last checkpoints, and OOM guards (halved micro-batch retry, smaller eval batch, `expandable_segments`).
 - Greedy and beam-search decoding; BLEU and chrF evaluation.
 - `safetensors` export with a frozen key contract for Python ↔ Rust interop.
 - A Python/Rust parity and benchmark harness.
