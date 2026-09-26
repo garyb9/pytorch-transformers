@@ -1,11 +1,6 @@
-fn main() {
-    println!("pytorch-transformers-rs: Rust/candle port lands in Spec 008");
-}
+use anyhow::Result;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn crate_builds() {
-        assert_eq!(2 + 2, 4);
-    }
+fn main() -> Result<()> {
+    println!("pytorch-transformers-rs: Rust/candle port (Spec 008)");
+    Ok(())
 }
