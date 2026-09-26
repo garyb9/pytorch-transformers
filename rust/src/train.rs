@@ -101,6 +101,7 @@ pub fn train_model(
             &batch.decoder_input,
             Some(&batch.encoder_mask),
             Some(&batch.decoder_mask),
+            true,
         )?;
         let (rows, seq_len, vocab) = logits.dims3()?;
         let flat_logits = logits.reshape((rows * seq_len, vocab))?;

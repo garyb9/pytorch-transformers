@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use anyhow::Result;
 use candle_core::{DType, Device};
 use candle_nn::VarBuilder;
-use pytorch_transformers_rs::{greedy_decode, ModelConfig, TokenizerWrapper, Transformer};
+use pytorch_transformers_rs::{
+    beam_search, greedy_decode, ModelConfig, TokenizerWrapper, Transformer,
+};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -13,6 +15,7 @@ struct Inputs {
     bos_id: u32,
     eos_id: u32,
     expected_greedy: Vec<u32>,
+    expected_beam: Vec<u32>,
 }
 
 #[derive(Deserialize)]
@@ -50,6 +53,27 @@ fn greedy_matches_python() -> Result<()> {
         &device,
     )?;
     assert_eq!(output, inputs.expected_greedy);
+    Ok(())
+}
+
+#[test]
+fn beam_matches_python() -> Result<()> {
+    let device = Device::Cpu;
+    let model = load_model(&device)?;
+    let raw = std::fs::read_to_string(fixture_dir().join("inputs.json"))?;
+    let inputs: Inputs = serde_json::from_str(&raw)?;
+
+    let output = beam_search(
+        &model,
+        &inputs.source_ids,
+        inputs.bos_id,
+        inputs.eos_id,
+        inputs.max_len,
+        3,
+        0.6,
+        &device,
+    )?;
+    assert_eq!(output, inputs.expected_beam);
     Ok(())
 }
 

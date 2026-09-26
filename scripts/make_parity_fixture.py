@@ -10,7 +10,7 @@ from pytorch_transformers.checkpoints import export_safetensors
 from pytorch_transformers.config import ModelConfig
 from pytorch_transformers.model import build_transformer
 from pytorch_transformers.tokenizer import TokenizerWrapper, train_tokenizer
-from pytorch_transformers.translate import greedy_decode
+from pytorch_transformers.translate import beam_search, greedy_decode
 
 CORPUS = [
     "hello world",
@@ -72,6 +72,9 @@ def main() -> None:
     expected_greedy = greedy_decode(
         model, wrapper, source_ids, torch.device("cpu"), max_len=8
     )
+    expected_beam = beam_search(
+        model, wrapper, source_ids, torch.device("cpu"), max_len=8, beam_size=3, length_penalty=0.6
+    )
 
     cases = ["hello world", "こんにちは世界", "attention is all you need"]
     (out / "tokenizer_cases.json").write_text(
@@ -89,6 +92,7 @@ def main() -> None:
                 "bos_id": wrapper.bos_id,
                 "eos_id": wrapper.eos_id,
                 "expected_greedy": expected_greedy,
+                "expected_beam": expected_beam,
             }
         ),
         encoding="utf-8",

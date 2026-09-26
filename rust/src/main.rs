@@ -6,7 +6,7 @@ use candle_core::{DType, Device};
 use candle_nn::VarBuilder;
 use clap::{Parser, Subcommand};
 use pytorch_transformers_rs::{
-    bench_translate, greedy_decode, percentile, train_model, BenchParams, ModelConfig,
+    beam_search, bench_translate, greedy_decode, percentile, train_model, BenchParams, ModelConfig,
     TokenizerWrapper, TrainOptions, Transformer,
 };
 
@@ -35,6 +35,8 @@ enum Command {
         file: Option<PathBuf>,
         #[arg(long, default_value_t = 64)]
         max_len: usize,
+        #[arg(long, default_value_t = 1)]
+        beam: usize,
         #[arg(long, default_value = "auto")]
         device: String,
     },
@@ -124,6 +126,7 @@ fn main() -> Result<()> {
             text,
             file,
             max_len,
+            beam,
             device,
         } => {
             let device = resolve_device(&device)?;
@@ -136,7 +139,11 @@ fn main() -> Result<()> {
                     continue;
                 }
                 let ids = tokenizer.encode(&line)?;
-                let output = greedy_decode(&model, &ids, bos, eos, max_len, &device)?;
+                let output = if beam > 1 {
+                    beam_search(&model, &ids, bos, eos, max_len, beam, 0.6, &device)?
+                } else {
+                    greedy_decode(&model, &ids, bos, eos, max_len, &device)?
+                };
                 println!("{}", tokenizer.decode(&output)?.trim());
             }
         }

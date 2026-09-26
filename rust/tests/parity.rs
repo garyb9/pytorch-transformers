@@ -39,7 +39,7 @@ fn forward_matches_python_logits() -> Result<()> {
     let src_mask = src_fill_mask(&src, inputs.pad_id)?;
     let tgt_mask = tgt_fill_mask(&tgt, inputs.pad_id)?;
 
-    let logits = model.forward(&src, &tgt, Some(&src_mask), Some(&tgt_mask))?;
+    let logits = model.forward(&src, &tgt, Some(&src_mask), Some(&tgt_mask), false)?;
 
     let expected: HashMap<String, Tensor> =
         candle_core::safetensors::load(dir.join("expected.safetensors"), &device)?;

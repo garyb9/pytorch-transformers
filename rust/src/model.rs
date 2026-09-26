@@ -4,21 +4,32 @@ use candle_nn::{embedding, layer_norm, linear, ops, Embedding, LayerNorm, Linear
 
 use crate::config::ModelConfig;
 
+fn maybe_dropout(x: &Tensor, p: f32, training: bool) -> Result<Tensor> {
+    if training && p > 0.0 {
+        Ok(ops::dropout(x, p)?)
+    } else {
+        Ok(x.clone())
+    }
+}
+
 pub struct FeedForward {
     linear1: Linear,
     linear2: Linear,
+    dropout: f32,
 }
 
 impl FeedForward {
-    pub fn new(d_model: usize, d_ff: usize, vb: VarBuilder) -> Result<Self> {
+    pub fn new(d_model: usize, d_ff: usize, dropout: f32, vb: VarBuilder) -> Result<Self> {
         Ok(Self {
             linear1: linear(d_model, d_ff, vb.pp("linear1"))?,
             linear2: linear(d_ff, d_model, vb.pp("linear2"))?,
+            dropout,
         })
     }
 
-    pub fn forward(&self, x: &Tensor) -> Result<Tensor> {
+    pub fn forward(&self, x: &Tensor, training: bool) -> Result<Tensor> {
         let hidden = self.linear1.forward(x)?.relu()?;
+        let hidden = maybe_dropout(&hidden, self.dropout, training)?;
         Ok(self.linear2.forward(&hidden)?)
     }
 }
@@ -30,10 +41,11 @@ pub struct MultiHeadAttention {
     w_o: Linear,
     n_heads: usize,
     d_k: usize,
+    dropout: f32,
 }
 
 impl MultiHeadAttention {
-    pub fn new(d_model: usize, n_heads: usize, vb: VarBuilder) -> Result<Self> {
+    pub fn new(d_model: usize, n_heads: usize, dropout: f32, vb: VarBuilder) -> Result<Self> {
         if !d_model.is_multiple_of(n_heads) {
             bail!("d_model ({d_model}) must be divisible by n_heads ({n_heads})");
         }
@@ -44,6 +56,7 @@ impl MultiHeadAttention {
             w_o: linear(d_model, d_model, vb.pp("w_o"))?,
             n_heads,
             d_k: d_model / n_heads,
+            dropout,
         })
     }
 
@@ -60,6 +73,7 @@ impl MultiHeadAttention {
         k: &Tensor,
         v: &Tensor,
         mask: Option<&Tensor>,
+        training: bool,
     ) -> Result<Tensor> {
         let query = self.split_heads(&self.w_q.forward(q)?)?;
         let key = self.split_heads(&self.w_k.forward(k)?)?;
@@ -75,6 +89,7 @@ impl MultiHeadAttention {
             None => scores,
         };
         let weights = ops::softmax(&scores, D::Minus1)?;
+        let weights = maybe_dropout(&weights, self.dropout, training)?;
         let context = weights.matmul(&value)?;
         let (batch, _heads, seq_len, _) = context.dims4()?;
         let context = context.transpose(1, 2)?.contiguous()?.reshape((
@@ -91,46 +106,53 @@ pub struct EncoderBlock {
     ffn: FeedForward,
     norm1: LayerNorm,
     norm2: LayerNorm,
+    dropout: f32,
     pre_norm: bool,
 }
 
 impl EncoderBlock {
     pub fn new(config: &ModelConfig, vb: VarBuilder) -> Result<Self> {
+        let dropout = config.dropout as f32;
         Ok(Self {
-            self_attn: MultiHeadAttention::new(config.d_model, config.n_heads, vb.pp("self_attn"))?,
-            ffn: FeedForward::new(config.d_model, config.d_ff, vb.pp("ffn"))?,
+            self_attn: MultiHeadAttention::new(
+                config.d_model,
+                config.n_heads,
+                dropout,
+                vb.pp("self_attn"),
+            )?,
+            ffn: FeedForward::new(config.d_model, config.d_ff, dropout, vb.pp("ffn"))?,
             norm1: layer_norm(config.d_model, config.layer_norm_eps, vb.pp("norm1"))?,
             norm2: layer_norm(config.d_model, config.layer_norm_eps, vb.pp("norm2"))?,
+            dropout,
             pre_norm: config.is_pre_norm(),
         })
     }
 
-    pub fn forward(&self, x: &Tensor, mask: Option<&Tensor>) -> Result<Tensor> {
-        let x = self.residual(x, mask)?;
-        self.residual_ffn(&x)
-    }
-
-    fn residual(&self, x: &Tensor, mask: Option<&Tensor>) -> Result<Tensor> {
-        if self.pre_norm {
+    pub fn forward(&self, x: &Tensor, mask: Option<&Tensor>, training: bool) -> Result<Tensor> {
+        let attention = if self.pre_norm {
             let h = self.norm1.forward(x)?;
-            let attn = self.self_attn.forward(&h, &h, &h, mask)?;
-            Ok((x + &attn)?)
+            self.self_attn.forward(&h, &h, &h, mask, training)?
         } else {
-            let attn = self.self_attn.forward(x, x, x, mask)?;
-            let summed = (x + &attn)?;
-            Ok(self.norm1.forward(&summed)?)
-        }
-    }
+            self.self_attn.forward(x, x, x, mask, training)?
+        };
+        let attention = maybe_dropout(&attention, self.dropout, training)?;
+        let x = if self.pre_norm {
+            (x + &attention)?
+        } else {
+            self.norm1.forward(&(x + &attention)?)?
+        };
 
-    fn residual_ffn(&self, x: &Tensor) -> Result<Tensor> {
-        if self.pre_norm {
-            let h = self.norm2.forward(x)?;
-            let ffn = self.ffn.forward(&h)?;
-            Ok((x + &ffn)?)
+        let ffn = if self.pre_norm {
+            let h = self.norm2.forward(&x)?;
+            self.ffn.forward(&h, training)?
         } else {
-            let ffn = self.ffn.forward(x)?;
-            let summed = (x + &ffn)?;
-            Ok(self.norm2.forward(&summed)?)
+            self.ffn.forward(&x, training)?
+        };
+        let ffn = maybe_dropout(&ffn, self.dropout, training)?;
+        if self.pre_norm {
+            Ok((&x + &ffn)?)
+        } else {
+            Ok(self.norm2.forward(&(&x + &ffn)?)?)
         }
     }
 }
@@ -142,22 +164,31 @@ pub struct DecoderBlock {
     norm1: LayerNorm,
     norm2: LayerNorm,
     norm3: LayerNorm,
+    dropout: f32,
     pre_norm: bool,
 }
 
 impl DecoderBlock {
     pub fn new(config: &ModelConfig, vb: VarBuilder) -> Result<Self> {
+        let dropout = config.dropout as f32;
         Ok(Self {
-            self_attn: MultiHeadAttention::new(config.d_model, config.n_heads, vb.pp("self_attn"))?,
+            self_attn: MultiHeadAttention::new(
+                config.d_model,
+                config.n_heads,
+                dropout,
+                vb.pp("self_attn"),
+            )?,
             cross_attn: MultiHeadAttention::new(
                 config.d_model,
                 config.n_heads,
+                dropout,
                 vb.pp("cross_attn"),
             )?,
-            ffn: FeedForward::new(config.d_model, config.d_ff, vb.pp("ffn"))?,
+            ffn: FeedForward::new(config.d_model, config.d_ff, dropout, vb.pp("ffn"))?,
             norm1: layer_norm(config.d_model, config.layer_norm_eps, vb.pp("norm1"))?,
             norm2: layer_norm(config.d_model, config.layer_norm_eps, vb.pp("norm2"))?,
             norm3: layer_norm(config.d_model, config.layer_norm_eps, vb.pp("norm3"))?,
+            dropout,
             pre_norm: config.is_pre_norm(),
         })
     }
@@ -168,35 +199,46 @@ impl DecoderBlock {
         encoder_output: &Tensor,
         src_mask: Option<&Tensor>,
         tgt_mask: Option<&Tensor>,
+        training: bool,
     ) -> Result<Tensor> {
-        let x = if self.pre_norm {
+        let self_attention = if self.pre_norm {
             let h = self.norm1.forward(x)?;
-            let attn = self.self_attn.forward(&h, &h, &h, tgt_mask)?;
-            (x + &attn)?
+            self.self_attn.forward(&h, &h, &h, tgt_mask, training)?
         } else {
-            let attn = self.self_attn.forward(x, x, x, tgt_mask)?;
-            self.norm1.forward(&(x + &attn)?)?
+            self.self_attn.forward(x, x, x, tgt_mask, training)?
         };
-
+        let self_attention = maybe_dropout(&self_attention, self.dropout, training)?;
         let x = if self.pre_norm {
-            let h = self.norm2.forward(&x)?;
-            let attn = self
-                .cross_attn
-                .forward(&h, encoder_output, encoder_output, src_mask)?;
-            (&x + &attn)?
+            (x + &self_attention)?
         } else {
-            let attn = self
-                .cross_attn
-                .forward(&x, encoder_output, encoder_output, src_mask)?;
-            self.norm2.forward(&(&x + &attn)?)?
+            self.norm1.forward(&(x + &self_attention)?)?
         };
 
-        if self.pre_norm {
+        let cross_attention = if self.pre_norm {
+            let h = self.norm2.forward(&x)?;
+            self.cross_attn
+                .forward(&h, encoder_output, encoder_output, src_mask, training)?
+        } else {
+            self.cross_attn
+                .forward(&x, encoder_output, encoder_output, src_mask, training)?
+        };
+        let cross_attention = maybe_dropout(&cross_attention, self.dropout, training)?;
+        let x = if self.pre_norm {
+            (&x + &cross_attention)?
+        } else {
+            self.norm2.forward(&(&x + &cross_attention)?)?
+        };
+
+        let ffn = if self.pre_norm {
             let h = self.norm3.forward(&x)?;
-            let ffn = self.ffn.forward(&h)?;
+            self.ffn.forward(&h, training)?
+        } else {
+            self.ffn.forward(&x, training)?
+        };
+        let ffn = maybe_dropout(&ffn, self.dropout, training)?;
+        if self.pre_norm {
             Ok((&x + &ffn)?)
         } else {
-            let ffn = self.ffn.forward(&x)?;
             Ok(self.norm3.forward(&(&x + &ffn)?)?)
         }
     }
@@ -213,6 +255,7 @@ pub struct Transformer {
     decoder_norm: LayerNorm,
     tgt_proj: Linear,
     d_model: usize,
+    dropout: f32,
 }
 
 impl Transformer {
@@ -269,6 +312,7 @@ impl Transformer {
             decoder_norm,
             tgt_proj,
             d_model,
+            dropout: config.dropout as f32,
         })
     }
 
@@ -278,12 +322,18 @@ impl Transformer {
         Ok(x.broadcast_add(&pe)?)
     }
 
-    pub fn encode(&self, src: &Tensor, src_mask: Option<&Tensor>) -> Result<Tensor> {
+    pub fn encode(
+        &self,
+        src: &Tensor,
+        src_mask: Option<&Tensor>,
+        training: bool,
+    ) -> Result<Tensor> {
         let scale = (self.d_model as f64).sqrt();
         let mut x = (self.src_embed.forward(src)? * scale)?;
         x = self.add_positional(&x, &self.src_pos)?;
+        x = maybe_dropout(&x, self.dropout, training)?;
         for layer in &self.encoder_layers {
-            x = layer.forward(&x, src_mask)?;
+            x = layer.forward(&x, src_mask, training)?;
         }
         Ok(self.encoder_norm.forward(&x)?)
     }
@@ -294,12 +344,14 @@ impl Transformer {
         src_mask: Option<&Tensor>,
         tgt: &Tensor,
         tgt_mask: Option<&Tensor>,
+        training: bool,
     ) -> Result<Tensor> {
         let scale = (self.d_model as f64).sqrt();
         let mut x = (self.tgt_embed.forward(tgt)? * scale)?;
         x = self.add_positional(&x, &self.tgt_pos)?;
+        x = maybe_dropout(&x, self.dropout, training)?;
         for layer in &self.decoder_layers {
-            x = layer.forward(&x, encoder_output, src_mask, tgt_mask)?;
+            x = layer.forward(&x, encoder_output, src_mask, tgt_mask, training)?;
         }
         Ok(self.decoder_norm.forward(&x)?)
     }
@@ -322,9 +374,10 @@ impl Transformer {
         tgt: &Tensor,
         src_mask: Option<&Tensor>,
         tgt_mask: Option<&Tensor>,
+        training: bool,
     ) -> Result<Tensor> {
-        let encoder_output = self.encode(src, src_mask)?;
-        let decoder_output = self.decode(&encoder_output, src_mask, tgt, tgt_mask)?;
+        let encoder_output = self.encode(src, src_mask, training)?;
+        let decoder_output = self.decode(&encoder_output, src_mask, tgt, tgt_mask, training)?;
         self.project(&decoder_output)
     }
 }
