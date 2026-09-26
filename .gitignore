@@ -161,3 +161,8 @@ cython_debug/
 
 runs/
 weights/
+data/
+bench/results.json
+tokenizer_*.json
+.ruff_cache/
+rust/target/

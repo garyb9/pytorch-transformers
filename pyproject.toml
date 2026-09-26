@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pytorch-transformers"
+version = "0.2.0"
+description = "From-scratch Transformer playground for EN<->JP translation in Python and Rust"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [{ name = "garyb9" }]
+dependencies = [
+  "torch>=2.4",
+  "datasets>=2.20",
+  "tokenizers>=0.15",
+  "safetensors>=0.4",
+  "sacrebleu>=2.4",
+  "torchmetrics>=1.4",
+  "tensorboard>=2.16",
+  "typer>=0.12",
+  "rich>=13.0",
+  "pyyaml>=6.0",
+  "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11"]
+
+[project.scripts]
+ptx = "pytorch_transformers.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pytorch_transformers"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+files = ["src"]
+python_version = "3.12"
+ignore_missing_imports = true
+warn_unused_ignores = true

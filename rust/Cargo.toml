@@ -1,0 +1,11 @@
+[package]
+name = "pytorch-transformers-rs"
+version = "0.1.0"
+edition = "2021"
+description = "Rust/candle port of the pytorch-transformers EN<->JP playground"
+license = "MIT"
+
+[dependencies]
+
+[features]
+cuda = []
