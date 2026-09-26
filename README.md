@@ -26,7 +26,7 @@ Both stacks share one tokenizer (`tokenizer.json`) and one weight format (`safet
 specs/                        design specs for every component
 configs/                      data + training configs (YAML)
 src/pytorch_transformers/     Python package
-rust/                         Rust/candle crate (binary: ptr)
+crates/transformer/           Rust/candle crate (binary: ptr)
 scripts/                      tokenizer/data, parity fixture, comparison harness
 tests/                        Python tests
 docs/                         the paper and architecture figures

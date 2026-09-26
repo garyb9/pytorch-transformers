@@ -112,7 +112,7 @@ def build_fixture(
 
 
 def main() -> None:
-    root = Path("rust/tests/fixtures")
+    root = Path(__file__).resolve().parents[1] / "crates" / "transformer" / "tests" / "fixtures"
     small = ModelConfig(
         src_vocab_size=1,
         tgt_vocab_size=1,

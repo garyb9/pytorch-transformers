@@ -15,8 +15,8 @@ from pytorch_transformers.translate import translate_text
 from pytorch_transformers.utils import resolve_device
 
 ROOT = Path(__file__).resolve().parents[1]
-RUST_DIR = ROOT / "rust"
-RUST_BIN = RUST_DIR / "target" / "release" / "pytorch-transformers-rs"
+RUST_DIR = ROOT
+RUST_BIN = ROOT / "target" / "release" / "pytorch-transformers-rs"
 
 DEFAULT_TEXTS = [
     "hello world",
@@ -92,7 +92,7 @@ def bench_rust(args, texts: list[str]) -> tuple[dict[str, Any], float]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Compare Python and Rust inference.")
-    fixture = ROOT / "rust" / "tests" / "fixtures" / "parity_small"
+    fixture = ROOT / "crates" / "transformer" / "tests" / "fixtures" / "parity_small"
     parser.add_argument("--python-model", default=str(fixture / "model.safetensors"))
     parser.add_argument("--rust-model", default=str(fixture / "model.safetensors"))
     parser.add_argument("--rust-config", default=str(fixture / "model.json"))

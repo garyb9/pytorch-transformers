@@ -1,6 +1,7 @@
 PY ?= python
 CARGO ?= cargo
 ARGS ?=
+RUST_PKG ?= pytorch-transformers-rs
 
 .PHONY: install lint format test specs train-tokenizer prepare-data train eval translate export bench rust-build rust-test rust-build-cuda
 
@@ -43,10 +44,10 @@ bench:
 	$(PY) scripts/compare.py $(ARGS)
 
 rust-build:
-	cd rust && $(CARGO) build
+	$(CARGO) build
 
 rust-test:
-	cd rust && $(CARGO) test
+	$(CARGO) test
 
 rust-build-cuda:
-	cd rust && $(CARGO) build --features cuda
+	$(CARGO) build -p $(RUST_PKG) --features cuda

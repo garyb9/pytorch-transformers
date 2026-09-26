@@ -21,7 +21,7 @@
   for Python and Rust, data attribution (JESC CC BY-SA 4.0; OPUS), CLI reference, and the
   benchmark table.
 - **FR-REPO-6** `.gitignore` covers `data/`, `weights/`, `runs/`, `bench/results.json`,
-  `rust/target/`, tokenizer JSONs.
+  `target/`, tokenizer JSONs.
 - **FR-REPO-7** `CONTRIBUTING.md` template placeholders cleaned; no dangling
   `CODE_OF_CONDUCT.md` link unless the file exists.
 

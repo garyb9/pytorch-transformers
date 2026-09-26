@@ -1,6 +1,6 @@
 # 008 — Rust port (candle)
 
-Crate: `rust/` (package `pytorch-transformers-rs`), binary `ptr`.
+Crate: `crates/transformer/` (package `pytorch-transformers-rs`), binary `ptr`.
 
 ## Requirements
 
