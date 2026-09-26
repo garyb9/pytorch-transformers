@@ -6,7 +6,8 @@ use candle_core::{DType, Device};
 use candle_nn::VarBuilder;
 use clap::{Parser, Subcommand};
 use pytorch_transformers_rs::{
-    greedy_decode, train_model, ModelConfig, TokenizerWrapper, TrainOptions, Transformer,
+    bench_translate, greedy_decode, percentile, train_model, BenchParams, ModelConfig,
+    TokenizerWrapper, TrainOptions, Transformer,
 };
 
 #[derive(Parser)]
@@ -60,6 +61,24 @@ enum Command {
         device: String,
         #[arg(long)]
         out: PathBuf,
+    },
+    Bench {
+        #[arg(long)]
+        model: PathBuf,
+        #[arg(long)]
+        config: PathBuf,
+        #[arg(long)]
+        tokenizer: PathBuf,
+        #[arg(long = "text")]
+        text: Vec<String>,
+        #[arg(long, default_value_t = 32)]
+        max_len: usize,
+        #[arg(long, default_value_t = 5)]
+        reps: usize,
+        #[arg(long, default_value_t = 2)]
+        warmup: usize,
+        #[arg(long, default_value = "auto")]
+        device: String,
     },
 }
 
@@ -156,6 +175,59 @@ fn main() -> Result<()> {
             )?;
             println!("final loss {loss:.4}");
         }
+        Command::Bench {
+            model,
+            config,
+            tokenizer,
+            text,
+            max_len,
+            reps,
+            warmup,
+            device,
+        } => {
+            let device = resolve_device(&device)?;
+            let model = load_model(&model, &config, &device)?;
+            let tokenizer = TokenizerWrapper::from_file(&tokenizer)?;
+            let texts = if text.is_empty() {
+                vec!["hello world".to_string(), "こんにちは世界".to_string()]
+            } else {
+                text
+            };
+            let outcome = bench_translate(
+                &model,
+                &tokenizer,
+                &texts,
+                &BenchParams {
+                    bos: tokenizer.bos_id()?,
+                    eos: tokenizer.eos_id()?,
+                    max_len,
+                    warmup,
+                    reps,
+                },
+                &device,
+            )?;
+            let timings = serde_json::json!({
+                "stack": "rust",
+                "device": device_label(&device),
+                "reps": reps,
+                "warmup": warmup,
+                "median_s": percentile(&outcome.times, 0.5),
+                "p95_s": percentile(&outcome.times, 0.95),
+                "min_s": outcome.times.iter().cloned().fold(f64::INFINITY, f64::min),
+                "outputs": outcome.outputs,
+            });
+            println!("{}", serde_json::to_string(&timings)?);
+        }
     }
     Ok(())
+}
+
+fn device_label(device: &Device) -> &'static str {
+    if device.is_cuda() {
+        "cuda"
+    } else if device.is_metal() {
+        "metal"
+    } else {
+        "cpu"
+    }
 }

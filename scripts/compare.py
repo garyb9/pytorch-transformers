@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
-import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -33,25 +32,25 @@ def percentile(values: list[float], fraction: float) -> float:
     return ordered[index]
 
 
-def python_translate(args, texts: list[str]) -> list[str]:
+def bench_python(args, texts: list[str]) -> tuple[list[str], list[float]]:
     device = resolve_device(args.device)
     model, _ = load_model(args.python_model)
     model.to(device).eval()
     tokenizer = TokenizerWrapper.from_file(args.tokenizer)
-    return [
-        translate_text(model, tokenizer, text, device, max_len=args.max_len, beam=args.beam)
-        for text in texts
-    ]
 
+    def run() -> list[str]:
+        return [
+            translate_text(model, tokenizer, text, device, max_len=args.max_len, beam=args.beam)
+            for text in texts
+        ]
 
-def bench_python(args, texts: list[str]) -> tuple[list[str], list[float]]:
     for _ in range(args.warmup):
-        python_translate(args, texts)
+        run()
     times: list[float] = []
     outputs: list[str] = []
     for _ in range(args.reps):
         start = time.perf_counter()
-        outputs = python_translate(args, texts)
+        outputs = run()
         times.append(time.perf_counter() - start)
     return outputs, times
 
@@ -64,52 +63,31 @@ def ensure_rust_binary() -> float:
     return time.perf_counter() - start
 
 
-def rust_translate(args, texts: list[str], input_file: str) -> list[str]:
+def bench_rust(args, texts: list[str]) -> tuple[dict[str, Any], float]:
+    build_seconds = ensure_rust_binary()
     command = [
         str(RUST_BIN),
-        "translate",
+        "bench",
         "--model",
         str(args.rust_model),
         "--config",
         str(args.rust_config),
         "--tokenizer",
         str(args.tokenizer),
-        "--file",
-        input_file,
         "--max-len",
         str(args.max_len),
+        "--reps",
+        str(args.reps),
+        "--warmup",
+        str(args.warmup),
         "--device",
         args.device,
     ]
+    for text in texts:
+        command.extend(["--text", text])
     process = subprocess.run(command, capture_output=True, text=True, check=True)
-    return process.stdout.strip().splitlines()
-
-
-def bench_rust(args, texts: list[str]) -> tuple[list[str], list[float], float]:
-    build_seconds = ensure_rust_binary()
-    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as handle:
-        handle.write("\n".join(texts) + "\n")
-        input_file = handle.name
-    try:
-        for _ in range(args.warmup):
-            rust_translate(args, texts, input_file)
-        times: list[float] = []
-        outputs: list[str] = []
-        for _ in range(args.reps):
-            start = time.perf_counter()
-            outputs = rust_translate(args, texts, input_file)
-            times.append(time.perf_counter() - start)
-    finally:
-        Path(input_file).unlink(missing_ok=True)
-    return outputs, times, build_seconds
-
-
-def summarise(times: list[float]) -> dict[str, float]:
-    return {
-        "median_s": percentile(times, 0.5),
-        "p95_s": percentile(times, 0.95),
-        "min_s": min(times),
-    }
+    payload: dict[str, Any] = json.loads(process.stdout.strip().splitlines()[-1])
+    return payload, build_seconds
 
 
 def main() -> None:
@@ -132,17 +110,26 @@ def main() -> None:
     torch.set_grad_enabled(False)
 
     py_outputs, py_times = bench_python(args, texts)
-    rust_outputs, rust_times, build_seconds = bench_rust(args, texts)
+    rust_payload, build_seconds = bench_rust(args, texts)
+    rust_outputs = rust_payload["outputs"]
 
     parity = py_outputs == rust_outputs
     results: dict[str, Any] = {
         "device": args.device,
         "beam": args.beam,
         "reps": args.reps,
+        "warmup": args.warmup,
         "texts": texts,
-        "python": {**summarise(py_times), "outputs": py_outputs},
+        "python": {
+            "median_s": percentile(py_times, 0.5),
+            "p95_s": percentile(py_times, 0.95),
+            "min_s": min(py_times),
+            "outputs": py_outputs,
+        },
         "rust": {
-            **summarise(rust_times),
+            "median_s": rust_payload["median_s"],
+            "p95_s": rust_payload["p95_s"],
+            "min_s": rust_payload["min_s"],
             "outputs": rust_outputs,
             "build_s": build_seconds,
         },

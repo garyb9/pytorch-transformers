@@ -1,59 +1,122 @@
-# Transformers Code Playground with PyTorch
-This project is designed for experimentation of the Transformer architecture using PyTorch. Whether you're new to Transformers or looking to dive deeper into their implementation, this repository provides a space for you to explore and experiment with the code.
+# pytorch-transformers
 
-Note: This project is strictly for educational and experimental purposes. Nothing here is intended for production use. Please use this code responsibly and ethically.
+A from-scratch **Transformer** (Vaswani et al., 2017 — [Attention Is All You Need](https://arxiv.org/abs/1706.03762)) for **English ↔ Japanese** translation, implemented twice:
 
-## Architecture
-### Transformer Architecture
-![Transformer Architecture](docs/transformer-architecture.png)
+- **Python / PyTorch** — the reference implementation, used for training and evaluation.
+- **Rust / [candle](https://github.com/huggingface/candle)** — an independent port for fast inference and training.
 
-The Transformer is a state-of-the-art deep learning model used for various natural language processing tasks. It consists of two main components: the encoder and the decoder.
+Both stacks share one tokenizer (`tokenizer.json`) and one weight format (`safetensors`), so their outputs and speed are directly comparable.
 
-The encoder processes the input sequence by applying self-attention mechanisms, which calculate the importance of each word in the context of the entire input sequence. This self-attention is performed using multi-head attention, which means that it considers multiple aspects of the input simultaneously. The math behind self-attention involves calculating weighted sums of the input tokens based on their relevance to each other.
+> Educational project. Nothing here is intended for production use.
 
-The decoder, on the other hand, generates the output sequence by also employing self-attention, but it additionally uses cross-attention to focus on relevant parts of the encoder's output. Cross-attention allows the model to understand how different parts of the input sequence influence the generation of the output.
+## Features
 
-Both the encoder and decoder consist of multiple layers, and the final prediction is made by applying fully connected layers and softmax functions. The Transformer's architecture, with its multi-head attention and layer-wise feedforward networks, has proven highly effective for a wide range of NLP tasks.
+- Paper-faithful encoder–decoder with multi-head attention, sinusoidal positional encodings, and configurable post-/pre-norm.
+- Shared byte-level BPE tokenizer (works for Japanese without whitespace assumptions).
+- Two-source data pipeline: **JESC** (conversational subtitles) and **OPUS-100** (mixed domain), with deterministic mixing, filtering, dedup, decontamination, and dual-track evaluation.
+- Directional configs for **EN→JA** and **JA→EN** (mixed-direction mode is reserved for later).
+- Training with warmup + inverse-sqrt LR, label smoothing, AMP, gradient clipping, resume, and best/last checkpoints.
+- Greedy and beam-search decoding; BLEU and chrF evaluation.
+- `safetensors` export with a frozen key contract for Python ↔ Rust interop.
+- A Python/Rust parity and benchmark harness.
 
-### Attention Mechanism 
-![Attention mechanism](docs/attention.png)
+## Repository layout
 
-1. Query (Q): The query is a representation of a specific word in the input sequence that we want to focus on. For example, if we're processing the word "apple" in the input, "apple" would be the query.
-
-2. Key (K): The key represents the words in the input sequence and helps determine the relevance of each word to the query. Each word in the input has an associated key.
-
-3. Value (V): The value represents the information contained in the words of the input sequence. The value is used to compute the weighted sum that the model assigns to each word based on its relevance to the query.
-
-The self-attention mechanism involves calculating a weighted sum of values, where the weights are determined by the similarity between the query and the keys. The similarity between the query and keys is computed using a dot product, and then it is scaled and passed through a softmax function to ensure that the attention weights sum up to 1. This weighted sum of values becomes the output for the word at the query position, reflecting its context with respect to the other words in the sequence.
-
-In multi-head attention, multiple sets of query, key, and value projections are employed in parallel. Each head learns to focus on different aspects of the input sequence, allowing the model to capture diverse patterns and relationships within the data. The results from each head are concatenated and linearly transformed to obtain the final output of the self-attention layer.
-
-## Getting Started
-Before you start exploring and experimenting with the Transformer architecture, you'll need to set up your environment. Here's how to get started:
-
-## Installation
-Clone this repository to your local machine:
-
-```bash
-git clone https://https://github.com/garyb9/pytorch-transformers.git
-cd pytorch-transformers
+```
+specs/                        design specs for every component
+configs/                      data + training configs (YAML)
+src/pytorch_transformers/     Python package
+rust/                         Rust/candle crate (binary: ptr)
+scripts/                      tokenizer/data, parity fixture, comparison harness
+tests/                        Python tests
+docs/                         the paper and architecture figures
 ```
 
-Install the required dependencies by running the following command:
+## Setup (Python)
 
 ```bash
-pip install -r requirements.txt
+uv venv .venv && source .venv/bin/activate
+uv pip install -e ".[dev]"
 ```
 
-## Usage
-Feel free to modify and extend the transformer_playground.py script to experiment with different configurations, hyperparameters, and datasets. You can also use this project as a starting point for your own experiments with Transformers.
+If you have a CUDA GPU, the default PyPI wheels are CUDA-enabled. Device selection is automatic: `cuda → mps → cpu`; override with `--device`.
 
-## Contributing
-If you find any issues or have ideas to improve this code playground, please feel free to open an issue or submit a pull request. Contributions are welcome!
+## Python quickstart
+
+```bash
+# 1. train a shared tokenizer on a sample of both corpora
+ptx train-tokenizer configs/data.yaml --out tokenizer_shared.json
+
+# 2. prepare data (streams OPUS-100 + JESC, mixes 30/70, exports shards)
+ptx prepare-data configs/data.yaml --tokenizer tokenizer_shared.json --out data/opus_jesc
+
+# 3. train a direction
+ptx train configs/en-ja.yaml --device auto
+
+# 4. evaluate / translate
+ptx eval weights/en-ja --split jesc-own-test --beam 4
+ptx translate weights/en-ja --text "Hello, how are you?"
+
+# 5. export flat safetensors for the Rust port
+ptx export weights/en-ja --out model.safetensors
+```
+
+For a fast smoke run, use `configs/dev.yaml` and `--max-examples 2000` on `prepare-data`.
+
+## Rust quickstart
+
+```bash
+cd rust
+cargo build --release            # CPU
+cargo build --release --features cuda   # NVIDIA GPU
+
+# translate with an exported model + config + tokenizer
+./target/release/pytorch-transformers-rs translate \
+  --model model.safetensors --config model.json \
+  --tokenizer tokenizer_shared.json --text "Hello, how are you?"
+
+# benchmark in-process (JSON timings)
+./target/release/pytorch-transformers-rs bench \
+  --model model.safetensors --config model.json \
+  --tokenizer tokenizer_shared.json --text "Hello"
+
+# train from the Python-exported shards
+./target/release/pytorch-transformers-rs train \
+  --config model.json --data-dir data/opus_jesc \
+  --tokenizer tokenizer_shared.json --steps 100 --out rust_run
+```
+
+## Parity & benchmark
+
+```bash
+make bench     # runs scripts/compare.py: Python vs Rust, checks output parity
+```
+
+Parity is enforced by tests: Rust logits match Python within `1e-3`, and greedy decoding produces identical token ids. `bench/results.json` records median/p95 timings for both stacks on the same inputs.
+
+> Note: the committed parity fixture is a tiny random model, so timings are dominated by per-op overhead rather than compute. Use a real exported checkpoint and a larger model for meaningful numbers.
+
+## Data & attribution
+
+- **JESC** — Japanese–English Subtitle Corpus (Pryzant et al., 2018), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+- **OPUS-100** — Zhang et al., 2020; released for research use.
+
+See `specs/001-data.md` for the exact mixing and split policy.
+
+## Development
+
+```bash
+make test      # pytest (tiny synthetic data, no downloads)
+make lint      # ruff + mypy
+cd rust && cargo fmt && cargo clippy --all-targets -- -D warnings && cargo test
+```
+
+## Status / roadmap
+
+- Done: model, tokenizer, two-source data, training, evaluation, CLI, Rust inference + training, parity + benchmark.
+- Reserved: mixed-direction model (shared vocab and language tags are already in place).
+- Planned: streaming `prepare-data` for full-corpus runs, Rust warmup LR schedule and dropout parity, beam search in Rust.
 
 ## License
-This project is provided under the MIT License. You can use, modify, and distribute the code, but please make sure to review the license for full details.
 
-Remember, this project is designed for learning and experimentation with Transformer architecture using PyTorch, and nothing in this project should be used in a production environment.
-
-Enjoy exploring the world of Transformers, and happy coding!
+MIT. See [LICENSE](LICENSE).
