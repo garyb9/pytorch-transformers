@@ -4,7 +4,8 @@ use anyhow::Result;
 use candle_core::{DType, Device};
 use candle_nn::VarBuilder;
 use pytorch_transformers_rs::{
-    beam_search, greedy_decode, BeamParams, ModelConfig, TokenizerWrapper, Transformer,
+    beam_search, greedy_decode, BeamParams, DecodeParams, ModelConfig, TokenizerWrapper,
+    Transformer,
 };
 use serde::Deserialize;
 
@@ -47,9 +48,13 @@ fn greedy_matches_python() -> Result<()> {
     let output = greedy_decode(
         &model,
         &inputs.source_ids,
-        inputs.bos_id,
-        inputs.eos_id,
-        inputs.max_len,
+        &DecodeParams {
+            bos: inputs.bos_id,
+            eos: inputs.eos_id,
+            max_len: inputs.max_len,
+            src_lang: None,
+            tgt_lang: None,
+        },
         &device,
     )?;
     assert_eq!(output, inputs.expected_greedy);
@@ -66,10 +71,14 @@ fn beam_matches_python() -> Result<()> {
     let output = beam_search(
         &model,
         &inputs.source_ids,
-        inputs.bos_id,
-        inputs.eos_id,
         &BeamParams {
-            max_len: inputs.max_len,
+            decode: DecodeParams {
+                bos: inputs.bos_id,
+                eos: inputs.eos_id,
+                max_len: inputs.max_len,
+                src_lang: None,
+                tgt_lang: None,
+            },
             beam_size: 3,
             length_penalty: 0.6,
         },

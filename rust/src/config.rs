@@ -57,6 +57,8 @@ pub struct ModelConfig {
     pub tie_embeddings: bool,
     #[serde(default)]
     pub lang_embedding: bool,
+    #[serde(default)]
+    pub direction: Option<String>,
 }
 
 impl ModelConfig {

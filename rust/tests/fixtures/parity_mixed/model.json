@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "direction": "mixed",
+  "tokenizer_sha256": null,
+  "src_vocab_size": 172,
+  "tgt_vocab_size": 172,
+  "src_seq_len": 64,
+  "tgt_seq_len": 64,
+  "d_model": 32,
+  "n_layers": 2,
+  "n_heads": 4,
+  "d_ff": 64,
+  "dropout": 0.0,
+  "layer_norm_eps": 1e-06,
+  "residual_mode": "post",
+  "tie_embeddings": false,
+  "lang_embedding": true
+}

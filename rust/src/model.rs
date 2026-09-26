@@ -12,6 +12,12 @@ fn maybe_dropout(x: &Tensor, p: f32, training: bool) -> Result<Tensor> {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct LangPair {
+    pub src: Option<u32>,
+    pub tgt: Option<u32>,
+}
+
 pub struct FeedForward {
     linear1: Linear,
     linear2: Linear,
@@ -247,6 +253,7 @@ impl DecoderBlock {
 pub struct Transformer {
     src_embed: Embedding,
     tgt_embed: Embedding,
+    lang_embed: Option<Embedding>,
     src_pos: Tensor,
     tgt_pos: Tensor,
     encoder_layers: Vec<EncoderBlock>,
@@ -260,9 +267,6 @@ pub struct Transformer {
 
 impl Transformer {
     pub fn load(config: &ModelConfig, vb: VarBuilder, device: &Device) -> Result<Self> {
-        if config.lang_embedding {
-            bail!("lang_embedding is reserved for mixed-direction mode");
-        }
         let d_model = config.d_model;
         let src_embed = embedding(config.src_vocab_size, d_model, vb.pp("src_embed"))?;
         let tgt_embed = if config.tie_embeddings {
@@ -275,6 +279,11 @@ impl Transformer {
         };
         let src_pos = sinusoidal(config.src_seq_len, d_model, device)?;
         let tgt_pos = sinusoidal(config.tgt_seq_len, d_model, device)?;
+        let lang_embed = if config.lang_embedding {
+            Some(embedding(2, d_model, vb.pp("lang_embed"))?)
+        } else {
+            None
+        };
 
         let mut encoder_layers = Vec::with_capacity(config.n_layers);
         let mut decoder_layers = Vec::with_capacity(config.n_layers);
@@ -304,6 +313,7 @@ impl Transformer {
         Ok(Self {
             src_embed,
             tgt_embed,
+            lang_embed,
             src_pos,
             tgt_pos,
             encoder_layers,
@@ -316,6 +326,17 @@ impl Transformer {
         })
     }
 
+    fn add_lang(&self, x: &Tensor, lang: Option<u32>) -> Result<Tensor> {
+        match (self.lang_embed.as_ref(), lang) {
+            (Some(embed), Some(id)) => {
+                let ids = Tensor::from_vec(vec![id], (1,), x.device())?;
+                let vector = embed.forward(&ids)?.unsqueeze(1)?;
+                Ok(x.broadcast_add(&vector)?)
+            }
+            _ => Ok(x.clone()),
+        }
+    }
+
     fn add_positional(&self, x: &Tensor, positional: &Tensor) -> Result<Tensor> {
         let seq_len = x.dim(1)?;
         let pe = positional.narrow(1, 0, seq_len)?;
@@ -326,11 +347,13 @@ impl Transformer {
         &self,
         src: &Tensor,
         src_mask: Option<&Tensor>,
+        src_lang: Option<u32>,
         training: bool,
     ) -> Result<Tensor> {
         let scale = (self.d_model as f64).sqrt();
         let mut x = (self.src_embed.forward(src)? * scale)?;
         x = self.add_positional(&x, &self.src_pos)?;
+        x = self.add_lang(&x, src_lang)?;
         x = maybe_dropout(&x, self.dropout, training)?;
         for layer in &self.encoder_layers {
             x = layer.forward(&x, src_mask, training)?;
@@ -344,11 +367,13 @@ impl Transformer {
         src_mask: Option<&Tensor>,
         tgt: &Tensor,
         tgt_mask: Option<&Tensor>,
+        tgt_lang: Option<u32>,
         training: bool,
     ) -> Result<Tensor> {
         let scale = (self.d_model as f64).sqrt();
         let mut x = (self.tgt_embed.forward(tgt)? * scale)?;
         x = self.add_positional(&x, &self.tgt_pos)?;
+        x = self.add_lang(&x, tgt_lang)?;
         x = maybe_dropout(&x, self.dropout, training)?;
         for layer in &self.decoder_layers {
             x = layer.forward(&x, encoder_output, src_mask, tgt_mask, training)?;
@@ -374,10 +399,18 @@ impl Transformer {
         tgt: &Tensor,
         src_mask: Option<&Tensor>,
         tgt_mask: Option<&Tensor>,
+        langs: LangPair,
         training: bool,
     ) -> Result<Tensor> {
-        let encoder_output = self.encode(src, src_mask, training)?;
-        let decoder_output = self.decode(&encoder_output, src_mask, tgt, tgt_mask, training)?;
+        let encoder_output = self.encode(src, src_mask, langs.src, training)?;
+        let decoder_output = self.decode(
+            &encoder_output,
+            src_mask,
+            tgt,
+            tgt_mask,
+            langs.tgt,
+            training,
+        )?;
         self.project(&decoder_output)
     }
 }

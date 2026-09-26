@@ -8,7 +8,7 @@ use rand::RngExt;
 
 use crate::config::ModelConfig;
 use crate::dataset::{make_batch, TranslationDataset};
-use crate::model::Transformer;
+use crate::model::{LangPair, Transformer};
 
 pub struct TrainOptions {
     pub data_dir: PathBuf,
@@ -101,6 +101,7 @@ pub fn train_model(
             &batch.decoder_input,
             Some(&batch.encoder_mask),
             Some(&batch.decoder_mask),
+            LangPair::default(),
             true,
         )?;
         let (rows, seq_len, vocab) = logits.dims3()?;

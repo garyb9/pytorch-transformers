@@ -3,7 +3,7 @@ use std::time::Instant;
 use anyhow::Result;
 use candle_core::Device;
 
-use crate::infer::greedy_decode;
+use crate::infer::{greedy_decode, DecodeParams};
 use crate::model::Transformer;
 use crate::tokenizer::TokenizerWrapper;
 
@@ -28,11 +28,17 @@ pub fn bench_translate(
     device: &Device,
 ) -> Result<BenchOutcome> {
     let run = || -> Result<Vec<String>> {
+        let decode = DecodeParams {
+            bos: params.bos,
+            eos: params.eos,
+            max_len: params.max_len,
+            src_lang: None,
+            tgt_lang: None,
+        };
         let mut outputs = Vec::with_capacity(texts.len());
         for text in texts {
             let ids = tokenizer.encode(text)?;
-            let generated =
-                greedy_decode(model, &ids, params.bos, params.eos, params.max_len, device)?;
+            let generated = greedy_decode(model, &ids, &decode, device)?;
             outputs.push(tokenizer.decode(&generated)?.trim().to_string());
         }
         Ok(outputs)

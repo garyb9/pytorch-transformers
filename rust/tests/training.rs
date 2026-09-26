@@ -51,6 +51,7 @@ fn training_smoke_writes_checkpoint() -> Result<()> {
         residual_mode: "post".to_string(),
         tie_embeddings: false,
         lang_embedding: false,
+        direction: None,
     };
     let options = TrainOptions {
         data_dir: data_dir.clone(),

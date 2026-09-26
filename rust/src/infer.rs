@@ -6,45 +6,83 @@ use candle_nn::ops;
 
 use crate::model::{tgt_fill_mask, Transformer};
 
+pub const LANG_EN: u32 = 0;
+pub const LANG_JA: u32 = 1;
+
+pub fn lang_id(name: &str) -> Option<u32> {
+    match name {
+        "en" => Some(LANG_EN),
+        "ja" => Some(LANG_JA),
+        _ => None,
+    }
+}
+
+pub fn default_langs(direction: &str) -> (Option<u32>, Option<u32>) {
+    match direction {
+        "ja-en" => (Some(LANG_JA), Some(LANG_EN)),
+        "en-ja" => (Some(LANG_EN), Some(LANG_JA)),
+        _ => (None, None),
+    }
+}
+
+pub struct DecodeParams {
+    pub bos: u32,
+    pub eos: u32,
+    pub max_len: usize,
+    pub src_lang: Option<u32>,
+    pub tgt_lang: Option<u32>,
+}
+
+pub struct BeamParams {
+    pub decode: DecodeParams,
+    pub beam_size: usize,
+    pub length_penalty: f64,
+}
+
 fn source_tensor(
     model: &Transformer,
     source_ids: &[u32],
     bos_id: u32,
     eos_id: u32,
     device: &Device,
-) -> Result<(Tensor, usize)> {
+) -> Result<Tensor> {
     let limit = model.max_src_len()?.saturating_sub(2);
     let source_ids = &source_ids[..source_ids.len().min(limit)];
     let mut tokens = vec![bos_id];
     tokens.extend_from_slice(source_ids);
     tokens.push(eos_id);
     let length = tokens.len();
-    Ok((Tensor::from_vec(tokens, (1, length), device)?, length))
+    Ok(Tensor::from_vec(tokens, (1, length), device)?)
 }
 
 pub fn greedy_decode(
     model: &Transformer,
     source_ids: &[u32],
-    bos_id: u32,
-    eos_id: u32,
-    max_len: usize,
+    params: &DecodeParams,
     device: &Device,
 ) -> Result<Vec<u32>> {
-    let (src, _) = source_tensor(model, source_ids, bos_id, eos_id, device)?;
-    let encoder_output = model.encode(&src, None, false)?;
-    let max_len = max_len.min(model.max_tgt_len()?);
+    let src = source_tensor(model, source_ids, params.bos, params.eos, device)?;
+    let encoder_output = model.encode(&src, None, params.src_lang, false)?;
+    let max_len = params.max_len.min(model.max_tgt_len()?);
 
-    let mut tokens = vec![bos_id];
+    let mut tokens = vec![params.bos];
     for _ in 0..max_len {
         let length = tokens.len();
         let tgt = Tensor::from_vec(tokens.clone(), (1, length), device)?;
         let tgt_mask = tgt_fill_mask(&tgt, u32::MAX)?;
-        let output = model.decode(&encoder_output, None, &tgt, Some(&tgt_mask), false)?;
+        let output = model.decode(
+            &encoder_output,
+            None,
+            &tgt,
+            Some(&tgt_mask),
+            params.tgt_lang,
+            false,
+        )?;
         let last = output.narrow(1, length - 1, 1)?;
         let logits = model.project(&last)?.flatten_all()?;
         let next = logits.argmax(D::Minus1)?.to_scalar::<u32>()?;
         tokens.push(next);
-        if next == eos_id {
+        if next == params.eos {
             break;
         }
     }
@@ -55,27 +93,20 @@ fn normalised_score(tokens: &[u32], log_prob: f64, penalty: f64) -> f64 {
     log_prob / (tokens.len() as f64).powf(penalty)
 }
 
-pub struct BeamParams {
-    pub max_len: usize,
-    pub beam_size: usize,
-    pub length_penalty: f64,
-}
-
 pub fn beam_search(
     model: &Transformer,
     source_ids: &[u32],
-    bos_id: u32,
-    eos_id: u32,
     params: &BeamParams,
     device: &Device,
 ) -> Result<Vec<u32>> {
-    let max_len = params.max_len.min(model.max_tgt_len()?);
+    let decode = &params.decode;
+    let max_len = decode.max_len.min(model.max_tgt_len()?);
     let beam_size = params.beam_size.max(1);
     let length_penalty = params.length_penalty;
-    let (src, _) = source_tensor(model, source_ids, bos_id, eos_id, device)?;
-    let encoder_output = model.encode(&src, None, false)?;
+    let src = source_tensor(model, source_ids, decode.bos, decode.eos, device)?;
+    let encoder_output = model.encode(&src, None, decode.src_lang, false)?;
 
-    let mut beams: Vec<(Vec<u32>, f64, bool)> = vec![(vec![bos_id], 0.0, false)];
+    let mut beams: Vec<(Vec<u32>, f64, bool)> = vec![(vec![decode.bos], 0.0, false)];
     let mut completed: Vec<(Vec<u32>, f64)> = Vec::new();
 
     for _ in 0..max_len {
@@ -91,7 +122,14 @@ pub fn beam_search(
             let length = tokens.len();
             let tgt = Tensor::from_vec(tokens.clone(), (1, length), device)?;
             let tgt_mask = tgt_fill_mask(&tgt, u32::MAX)?;
-            let output = model.decode(&encoder_output, None, &tgt, Some(&tgt_mask), false)?;
+            let output = model.decode(
+                &encoder_output,
+                None,
+                &tgt,
+                Some(&tgt_mask),
+                decode.tgt_lang,
+                false,
+            )?;
             let last = output.narrow(1, length - 1, 1)?;
             let logits = model.project(&last)?.flatten_all()?;
             let log_probs = ops::log_softmax(&logits, D::Minus1)?.to_vec1::<f32>()?;
@@ -106,7 +144,7 @@ pub fn beam_search(
                 let mut new_tokens = tokens.clone();
                 new_tokens.push(token_id);
                 let new_log_prob = log_prob + value as f64;
-                if token_id == eos_id {
+                if token_id == decode.eos {
                     completed.push((new_tokens, new_log_prob));
                 } else {
                     candidates.push((new_tokens, new_log_prob, false));

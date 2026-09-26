@@ -6,8 +6,9 @@ use candle_core::{DType, Device};
 use candle_nn::VarBuilder;
 use clap::{Parser, Subcommand};
 use pytorch_transformers_rs::{
-    beam_search, bench_translate, greedy_decode, percentile, train_model, BeamParams, BenchParams,
-    ModelConfig, TokenizerWrapper, TrainOptions, Transformer,
+    beam_search, bench_translate, default_langs, greedy_decode, lang_id, percentile, train_model,
+    BeamParams, BenchParams, DecodeParams, ModelConfig, TokenizerWrapper, TrainOptions,
+    Transformer,
 };
 
 #[derive(Parser)]
@@ -37,6 +38,10 @@ enum Command {
         max_len: usize,
         #[arg(long, default_value_t = 1)]
         beam: usize,
+        #[arg(long, default_value = "")]
+        src_lang: String,
+        #[arg(long, default_value = "")]
+        tgt_lang: String,
         #[arg(long, default_value = "auto")]
         device: String,
     },
@@ -95,10 +100,17 @@ fn resolve_device(name: &str) -> Result<Device> {
     })
 }
 
-fn load_model(model: &Path, config: &Path, device: &Device) -> Result<Transformer> {
-    let config = ModelConfig::from_json_file(config)?;
+fn load_model(model: &Path, config: &ModelConfig, device: &Device) -> Result<Transformer> {
     let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[model], DType::F32, device)? };
-    Transformer::load(&config, vb, device)
+    Transformer::load(config, vb, device)
+}
+
+fn optional_lang(value: &str) -> Option<u32> {
+    if value.is_empty() {
+        None
+    } else {
+        lang_id(value)
+    }
 }
 
 fn read_inputs(text: Option<String>, file: Option<PathBuf>) -> Result<Vec<String>> {
@@ -127,13 +139,23 @@ fn main() -> Result<()> {
             file,
             max_len,
             beam,
+            src_lang,
+            tgt_lang,
             device,
         } => {
             let device = resolve_device(&device)?;
-            let model = load_model(&model, &config, &device)?;
+            let model_config = ModelConfig::from_json_file(&config)?;
+            let model = load_model(&model, &model_config, &device)?;
             let tokenizer = TokenizerWrapper::from_file(&tokenizer)?;
-            let bos = tokenizer.bos_id()?;
-            let eos = tokenizer.eos_id()?;
+            let (default_src, default_tgt) =
+                default_langs(model_config.direction.as_deref().unwrap_or(""));
+            let decode = DecodeParams {
+                bos: tokenizer.bos_id()?,
+                eos: tokenizer.eos_id()?,
+                max_len,
+                src_lang: optional_lang(&src_lang).or(default_src),
+                tgt_lang: optional_lang(&tgt_lang).or(default_tgt),
+            };
             for line in read_inputs(text, file)? {
                 if line.trim().is_empty() {
                     continue;
@@ -143,17 +165,21 @@ fn main() -> Result<()> {
                     beam_search(
                         &model,
                         &ids,
-                        bos,
-                        eos,
                         &BeamParams {
-                            max_len,
+                            decode: DecodeParams {
+                                bos: decode.bos,
+                                eos: decode.eos,
+                                max_len: decode.max_len,
+                                src_lang: decode.src_lang,
+                                tgt_lang: decode.tgt_lang,
+                            },
                             beam_size: beam,
                             length_penalty: 0.6,
                         },
                         &device,
                     )?
                 } else {
-                    greedy_decode(&model, &ids, bos, eos, max_len, &device)?
+                    greedy_decode(&model, &ids, &decode, &device)?
                 };
                 println!("{}", tokenizer.decode(&output)?.trim());
             }
@@ -208,7 +234,8 @@ fn main() -> Result<()> {
             device,
         } => {
             let device = resolve_device(&device)?;
-            let model = load_model(&model, &config, &device)?;
+            let model_config = ModelConfig::from_json_file(&config)?;
+            let model = load_model(&model, &model_config, &device)?;
             let tokenizer = TokenizerWrapper::from_file(&tokenizer)?;
             let texts = if text.is_empty() {
                 vec!["hello world".to_string(), "こんにちは世界".to_string()]
