@@ -214,6 +214,9 @@ def run_validation(
         if len(hypotheses) < val_samples:
             source_ids = content_ids(moved["encoder_input"][0].tolist(), tokenizer)
             src_lang, tgt_lang = lang_ids_for(config.direction)
+            if src_lang is None and tgt_lang is None:
+                src_lang = int(moved["src_lang_id"][0])
+                tgt_lang = int(moved["tgt_lang_id"][0])
             predicted = translate_ids(
                 model,
                 tokenizer,

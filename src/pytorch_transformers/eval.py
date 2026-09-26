@@ -40,13 +40,17 @@ def evaluate(
     device = resolve_device(device_name)
     model.to(device).eval()
 
-    src_lang, tgt_lang = lang_ids_for(eval_direction)
+    base_src_lang, base_tgt_lang = lang_ids_for(eval_direction)
     hypotheses: list[str] = []
     references: list[str] = []
     for index, item in enumerate(dataset):
         if limit is not None and index >= limit:
             break
         source_ids = content_ids(item["encoder_input"].tolist(), tokenizer)
+        src_lang, tgt_lang = base_src_lang, base_tgt_lang
+        if src_lang is None and tgt_lang is None:
+            src_lang = int(item["src_lang_id"])
+            tgt_lang = int(item["tgt_lang_id"])
         predicted = translate_ids(
             model,
             tokenizer,

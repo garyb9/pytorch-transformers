@@ -221,3 +221,99 @@ def test_train_oom_retries_with_smaller_micro_batch(tmp_path: Path, monkeypatch)
     result = train_model(config, device_name="cpu", max_steps=1)
     assert result["global_step"] == 1
     assert calls["count"] == 2
+
+
+def test_validation_mixed_uses_batch_language_ids(tmp_path: Path, monkeypatch) -> None:
+    import pytorch_transformers.train as train_mod
+
+    _, tokenizer_path, data_dir = make_data(tmp_path)
+    original = train_mod.translate_ids
+    captured: dict = {}
+
+    def spy(model, tokenizer, source_ids, device, max_len, **kwargs):
+        captured.update(kwargs)
+        return original(model, tokenizer, source_ids, device, max_len, **kwargs)
+
+    monkeypatch.setattr(train_mod, "translate_ids", spy)
+    config = TrainConfig(
+        direction="mixed",
+        lang_embedding=True,
+        data_dir=str(data_dir),
+        tokenizer_path=str(tokenizer_path),
+        model_folder=str(tmp_path / "weights"),
+        run_name="mixed-val",
+        seq_len=16,
+        batch_size=4,
+        num_epochs=2,
+        lr=1e-3,
+        warmup_steps=2,
+        d_model=32,
+        n_layers=1,
+        n_heads=2,
+        d_ff=64,
+        dropout=0.0,
+        num_workers=0,
+        eval_batch_size=2,
+        val_interval=1,
+        val_batches=1,
+        amp=False,
+        checkpoint_interval=0,
+        snapshot_interval=0,
+        seed=0,
+    )
+    train_model(config, device_name="cpu", max_steps=1)
+    assert captured["src_lang"] is not None
+    assert captured["tgt_lang"] is not None
+
+
+def test_eval_mixed_without_direction_uses_batch_language_ids(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import pytorch_transformers.eval as eval_mod
+
+    _, tokenizer_path, data_dir = make_data(tmp_path)
+    config = TrainConfig(
+        direction="mixed",
+        lang_embedding=True,
+        data_dir=str(data_dir),
+        tokenizer_path=str(tokenizer_path),
+        model_folder=str(tmp_path / "weights"),
+        run_name="mixed-eval",
+        seq_len=16,
+        batch_size=4,
+        num_epochs=2,
+        lr=1e-3,
+        warmup_steps=2,
+        d_model=32,
+        n_layers=1,
+        n_heads=2,
+        d_ff=64,
+        dropout=0.0,
+        num_workers=0,
+        val_interval=0,
+        amp=False,
+        checkpoint_interval=0,
+        snapshot_interval=0,
+        seed=0,
+    )
+    train_model(config, device_name="cpu", max_steps=1)
+
+    original = eval_mod.translate_ids
+    captured: dict = {}
+
+    def spy(model, tokenizer, source_ids, device, max_len, **kwargs):
+        captured.update(kwargs)
+        return original(model, tokenizer, source_ids, device, max_len, **kwargs)
+
+    monkeypatch.setattr(eval_mod, "translate_ids", spy)
+    metrics = evaluate(
+        tmp_path / "weights" / "mixed-eval",
+        data_dir,
+        tokenizer_path=tokenizer_path,
+        split="jesc-own-dev",
+        device_name="cpu",
+        limit=1,
+    )
+    assert metrics["direction"] == "mixed"
+    assert captured["src_lang"] is not None
+    assert captured["tgt_lang"] is not None
