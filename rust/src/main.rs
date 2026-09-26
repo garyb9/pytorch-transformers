@@ -1,6 +1,98 @@
+use std::io::Read;
+use std::path::{Path, PathBuf};
+
 use anyhow::Result;
+use candle_core::{DType, Device};
+use candle_nn::VarBuilder;
+use clap::{Parser, Subcommand};
+use pytorch_transformers_rs::{greedy_decode, ModelConfig, TokenizerWrapper, Transformer};
+
+#[derive(Parser)]
+#[command(
+    name = "ptr",
+    about = "EN<->JP transformer inference and training (candle)"
+)]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    Translate {
+        #[arg(long)]
+        model: PathBuf,
+        #[arg(long)]
+        config: PathBuf,
+        #[arg(long)]
+        tokenizer: PathBuf,
+        #[arg(long)]
+        text: Option<String>,
+        #[arg(long)]
+        file: Option<PathBuf>,
+        #[arg(long, default_value_t = 64)]
+        max_len: usize,
+        #[arg(long, default_value = "auto")]
+        device: String,
+    },
+}
+
+fn resolve_device(name: &str) -> Result<Device> {
+    Ok(match name {
+        "cpu" => Device::Cpu,
+        "cuda" => Device::new_cuda(0)?,
+        "metal" => Device::new_metal(0)?,
+        _ => Device::cuda_if_available(0).unwrap_or(Device::Cpu),
+    })
+}
+
+fn load_model(model: &Path, config: &Path, device: &Device) -> Result<Transformer> {
+    let config = ModelConfig::from_json_file(config)?;
+    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[model], DType::F32, device)? };
+    Transformer::load(&config, vb, device)
+}
+
+fn read_inputs(text: Option<String>, file: Option<PathBuf>) -> Result<Vec<String>> {
+    if let Some(value) = text {
+        return Ok(vec![value]);
+    }
+    let content = match file {
+        Some(path) => std::fs::read_to_string(path)?,
+        None => {
+            let mut buffer = String::new();
+            std::io::stdin().read_to_string(&mut buffer)?;
+            buffer
+        }
+    };
+    Ok(content.lines().map(str::to_string).collect())
+}
 
 fn main() -> Result<()> {
-    println!("pytorch-transformers-rs: Rust/candle port (Spec 008)");
+    let cli = Cli::parse();
+    match cli.command {
+        Command::Translate {
+            model,
+            config,
+            tokenizer,
+            text,
+            file,
+            max_len,
+            device,
+        } => {
+            let device = resolve_device(&device)?;
+            let model = load_model(&model, &config, &device)?;
+            let tokenizer = TokenizerWrapper::from_file(&tokenizer)?;
+            let bos = tokenizer.bos_id()?;
+            let eos = tokenizer.eos_id()?;
+            for line in read_inputs(text, file)? {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                let ids = tokenizer.encode(&line)?;
+                let output = greedy_decode(&model, &ids, bos, eos, max_len, &device)?;
+                println!("{}", tokenizer.decode(&output)?);
+            }
+        }
+    }
     Ok(())
 }

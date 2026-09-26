@@ -22,14 +22,25 @@ CORPUS = [
 ]
 
 
+class StubTokenizer:
+    pass
+
+
 def main() -> None:
     torch.manual_seed(0)
     out = Path("rust/tests/fixtures/parity_small")
     out.mkdir(parents=True, exist_ok=True)
 
+    tokenizer_path = out / "tokenizer.json"
+    train_tokenizer(
+        (text for _ in range(40) for text in CORPUS), vocab_size=400, save_path=tokenizer_path
+    )
+    wrapper = TokenizerWrapper.from_file(tokenizer_path)
+    vocab_size = wrapper.vocab_size
+
     config = ModelConfig(
-        src_vocab_size=40,
-        tgt_vocab_size=40,
+        src_vocab_size=vocab_size,
+        tgt_vocab_size=vocab_size,
         src_seq_len=16,
         tgt_seq_len=16,
         d_model=32,
@@ -42,10 +53,10 @@ def main() -> None:
     model = build_transformer(config).eval()
     export_safetensors(model, out / "model.safetensors", config, "en-ja")
 
-    pad = 0
-    src = torch.randint(1, 40, (2, 9))
+    pad = wrapper.pad_id
+    src = torch.randint(1, vocab_size, (2, 9))
     src[:, -1] = pad
-    tgt = torch.randint(1, 40, (2, 7))
+    tgt = torch.randint(1, vocab_size, (2, 7))
     tgt[:, -1] = pad
 
     src_mask = (src != pad).unsqueeze(1).unsqueeze(2)
@@ -55,28 +66,18 @@ def main() -> None:
 
     with torch.no_grad():
         logits = model(src, tgt, src_mask, tgt_mask)
-
     save_file({"logits": logits.contiguous()}, str(out / "expected.safetensors"))
 
-    class Stub:
-        bos_id = 2
-        eos_id = 3
-        pad_id = 0
-
     source_ids = [5, 6, 7, 8, 9]
-    expected_greedy = greedy_decode(model, Stub(), source_ids, torch.device("cpu"), max_len=8)
-
-    tokenizer_path = out / "tokenizer.json"
-    train_tokenizer(
-        (text for _ in range(40) for text in CORPUS), vocab_size=400, save_path=tokenizer_path
+    expected_greedy = greedy_decode(
+        model, wrapper, source_ids, torch.device("cpu"), max_len=8
     )
-    wrapper = TokenizerWrapper.from_file(tokenizer_path)
+
     cases = ["hello world", "こんにちは世界", "attention is all you need"]
     (out / "tokenizer_cases.json").write_text(
         json.dumps({"texts": cases, "ids": [wrapper.encode(text) for text in cases]}),
         encoding="utf-8",
     )
-
     (out / "inputs.json").write_text(
         json.dumps(
             {
@@ -85,14 +86,14 @@ def main() -> None:
                 "pad_id": pad,
                 "source_ids": source_ids,
                 "max_len": 8,
-                "bos_id": 2,
-                "eos_id": 3,
+                "bos_id": wrapper.bos_id,
+                "eos_id": wrapper.eos_id,
                 "expected_greedy": expected_greedy,
             }
         ),
         encoding="utf-8",
     )
-    print(f"wrote fixture to {out}")
+    print(f"wrote fixture to {out} (vocab {vocab_size})")
 
 
 if __name__ == "__main__":
