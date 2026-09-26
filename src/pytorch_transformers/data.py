@@ -168,6 +168,22 @@ def text_blocked_hashes(texts: Iterable[str], tokenizer: TokenizerWrapper) -> se
     return blocked
 
 
+def pair_text_hashes(pairs: Iterable[Pair], tokenizer: TokenizerWrapper) -> Iterator[str]:
+    for pair in pairs:
+        for text in (pair.src, pair.tgt):
+            cleaned = normalize(text)
+            if cleaned:
+                yield ids_hash(tokenizer.encode(cleaned))
+
+
+def read_tsv_pairs(path: str | Path, origin: str = "jesc-official") -> Iterator[Pair]:
+    with Path(path).open(encoding="utf-8") as handle:
+        for index, line in enumerate(handle):
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) >= 2:
+                yield Pair(index, parts[0], parts[1], origin)
+
+
 def decontaminate(pairs: Iterable[TokenizedPair], blocked: set[str]) -> Iterator[TokenizedPair]:
     for pair in pairs:
         if ids_hash(pair.src_ids) in blocked or ids_hash(pair.tgt_ids) in blocked:
@@ -289,62 +305,53 @@ def prepare_data(
     opus = config.source("opus100")
     for split in (opus.validation_split, opus.test_split):
         if split:
-            texts: list[str] = []
-            for pair in load_hf_pairs(opus, split=split):
-                texts.append(pair.src)
-                texts.append(pair.tgt)
-            blocked |= text_blocked_hashes(texts, tokenizer)
+            blocked |= set(pair_text_hashes(load_hf_pairs(opus, split=split), tokenizer))
 
     jesc = config.source("jesc")
     own_dev: list[TokenizedPair] = []
     own_test: list[TokenizedPair] = []
-    jesc_train_candidates: list[TokenizedPair] = []
-    jesc_kept = 0
-    for tokenized in tokenize_and_filter(
-        load_hf_pairs(jesc, limit=bounded(jesc)), tokenizer, config.filters
-    ):
-        jesc_kept += 1
-        bucket = bucket_for(
+
+    def jesc_bucket(pair: Pair) -> str:
+        return bucket_for(
             jesc.id,
-            tokenized.pair_id,
+            pair.pair_id,
             config.seed,
             config.own_dev_fraction,
             config.own_test_fraction,
         )
-        if bucket == "dev":
-            own_dev.append(tokenized)
-        elif bucket == "test":
-            own_test.append(tokenized)
-        else:
-            jesc_train_candidates.append(tokenized)
-    stats["sources"]["jesc"] = {
-        "tokenized": jesc_kept,
-        "own_dev": len(own_dev),
-        "own_test": len(own_test),
-    }
 
-    for tokenized in own_dev + own_test:
-        blocked.add(ids_hash(tokenized.src_ids))
-        blocked.add(ids_hash(tokenized.tgt_ids))
+    for pair in load_hf_pairs(jesc, limit=bounded(jesc)):
+        bucket = jesc_bucket(pair)
+        if bucket == "train":
+            continue
+        for tokenized in tokenize_and_filter([pair], tokenizer, config.filters):
+            if bucket == "dev":
+                own_dev.append(tokenized)
+            else:
+                own_test.append(tokenized)
+            blocked.add(ids_hash(tokenized.src_ids))
+            blocked.add(ids_hash(tokenized.tgt_ids))
+    stats["sources"]["jesc"] = {"own_dev": len(own_dev), "own_test": len(own_test)}
 
     if jesc_official_dir is not None:
         official = Path(jesc_official_dir)
         for name in ("dev", "test"):
             candidate = official / f"{name}.tsv"
             if candidate.exists():
-                texts = []
-                with candidate.open(encoding="utf-8") as handle:
-                    for line in handle:
-                        parts = line.rstrip("\n").split("\t")
-                        if len(parts) >= 2:
-                            texts.extend(parts[:2])
-                blocked |= text_blocked_hashes(texts, tokenizer)
+                blocked |= set(pair_text_hashes(read_tsv_pairs(candidate), tokenizer))
+
+    def jesc_train_pairs() -> Iterator[Pair]:
+        for pair in load_hf_pairs(jesc, limit=bounded(jesc)):
+            if jesc_bucket(pair) == "train":
+                yield pair
 
     opus_train = tokenize_and_filter(
         load_hf_pairs(opus, limit=bounded(opus)), tokenizer, config.filters
     )
     opus_clean = decontaminate(opus_train, blocked)
-    jesc_train = decontaminate(iter(jesc_train_candidates), blocked)
+    jesc_train = decontaminate(
+        tokenize_and_filter(jesc_train_pairs(), tokenizer, config.filters), blocked
+    )
 
     mixed = interleave([(opus_clean, opus.weight), (jesc_train, jesc.weight)], config.seed)
     deduped = dedup(mixed)
