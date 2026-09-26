@@ -27,7 +27,7 @@ count). Official dev/test are used as an **external benchmark only**.
 - **FR-DATA-6** Decontamination: drop any train pair whose normalized source or target
   appears in any eval split: OPUS test/validation, JESC-own test/dev, official JESC dev/test.
 - **FR-DATA-7** Direction augmentation: each pair yields both orientations once;
-  `direction` is selected at train time. One prepared corpus serves `en-ja` and `ja-en`.
+  `direction` is selected at train time. One prepared corpus serves `en-jp` and `jp-en`.
 - **FR-DATA-8** Export: sharded JSONL `{"src":[ids],"tgt":[ids],"origin":"...","pair_id":N}`
   plus `manifest.json` with `{counts, max_lens, weights, tokenizer_sha256, git_rev, seed,
   stats}`. Rust consumes exactly these files.

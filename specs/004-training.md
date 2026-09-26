@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- **FR-TRAIN-1** Configs: `configs/en-ja.yaml`, `configs/ja-en.yaml`, `configs/dev.yaml`
+- **FR-TRAIN-1** Configs: `configs/en-jp.yaml`, `configs/jp-en.yaml`, `configs/dev.yaml`
   (tiny subset, few steps). YAML is the single source of truth; CLI flags override.
 - **FR-TRAIN-2** Optimization, paper-style:
   - Adam `β=(0.9, 0.98)`, `eps=1e-9`
@@ -26,7 +26,7 @@
   seeding. Optional `--deterministic` for strict algorithms.
 - **FR-TRAIN-9** Data loading: `num_workers`, `pin_memory`, `persistent_workers`,
   prefetch; tokens/sec counter from the actual `(B, S+T)` consumed.
-- **FR-TRAIN-10** `direction: mixed` trains a single model over both orientations using language embeddings (`lang_embedding: true`). At eval time, select a direction with `--direction en-ja|ja-en`.
+- **FR-TRAIN-10** `direction: mixed` trains a single model over both orientations using language embeddings (`lang_embedding: true`). At eval time, select a direction with `--direction en-jp|jp-en`.
 
 ## Acceptance
 

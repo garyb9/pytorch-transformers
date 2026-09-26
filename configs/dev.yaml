@@ -1,4 +1,4 @@
-direction: en-ja
+direction: en-jp
 data_dir: data/dev
 tokenizer_path: tokenizer_shared.json
 model_folder: weights

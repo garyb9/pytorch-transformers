@@ -125,7 +125,7 @@ def main() -> None:
         dropout=0.0,
         residual_mode="post",
     )
-    build_fixture(root / "parity_small", small, "en-ja", (None, None))
+    build_fixture(root / "parity_small", small, "en-jp", (None, None))
     mixed = ModelConfig.from_dict({**small.to_dict(), "lang_embedding": True})
     build_fixture(root / "parity_mixed", mixed, "mixed", (0, 1))
 

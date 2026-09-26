@@ -56,7 +56,7 @@ fn training_smoke_writes_checkpoint() -> Result<()> {
     let options = TrainOptions {
         data_dir: data_dir.clone(),
         split: "train".to_string(),
-        direction: "en-ja".to_string(),
+        direction: "en-jp".to_string(),
         seq_len: 8,
         batch_size: 4,
         steps: 20,

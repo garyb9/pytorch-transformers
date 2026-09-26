@@ -61,7 +61,7 @@ def make_data(tmp_path: Path) -> tuple[TokenizerWrapper, Path, Path]:
 def test_train_smoke_then_eval(tmp_path: Path) -> None:
     _, tokenizer_path, data_dir = make_data(tmp_path)
     config = TrainConfig(
-        direction="en-ja",
+        direction="en-jp",
         data_dir=str(data_dir),
         tokenizer_path=str(tokenizer_path),
         model_folder=str(tmp_path / "weights"),
@@ -91,7 +91,7 @@ def test_train_smoke_then_eval(tmp_path: Path) -> None:
 
     _, metadata, _ = load_run_dir(run_dir)
     assert metadata["global_step"] == 3
-    assert metadata["direction"] == "en-ja"
+    assert metadata["direction"] == "en-jp"
 
     metrics = evaluate(
         run_dir,
@@ -107,9 +107,9 @@ def test_train_smoke_then_eval(tmp_path: Path) -> None:
 
 def test_train_config_from_yaml_ignores_unknown(tmp_path: Path) -> None:
     path = tmp_path / "c.yaml"
-    path.write_text("direction: ja-en\nbatch_size: 8\nunknown_key: 1\n", encoding="utf-8")
+    path.write_text("direction: jp-en\nbatch_size: 8\nunknown_key: 1\n", encoding="utf-8")
     config = TrainConfig.from_yaml(path)
-    assert config.direction == "ja-en"
+    assert config.direction == "jp-en"
     assert config.batch_size == 8
 
 

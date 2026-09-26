@@ -10,13 +10,13 @@ from tokenizers.models import BPE
 from tokenizers.pre_tokenizers import ByteLevel
 from tokenizers.trainers import BpeTrainer
 
-SPECIAL_TOKENS = ["[PAD]", "[UNK]", "[BOS]", "[EOS]", "<2en>", "<2ja>"]
+SPECIAL_TOKENS = ["[PAD]", "[UNK]", "[BOS]", "[EOS]", "<2en>", "<2jp>"]
 PAD_TOKEN = "[PAD]"
 UNK_TOKEN = "[UNK]"
 BOS_TOKEN = "[BOS]"
 EOS_TOKEN = "[EOS]"
 LANG_EN_TOKEN = "<2en>"
-LANG_JA_TOKEN = "<2ja>"
+LANG_JP_TOKEN = "<2jp>"
 
 
 def train_tokenizer(

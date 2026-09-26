@@ -7,20 +7,20 @@ use candle_nn::ops;
 use crate::model::{tgt_fill_mask, Transformer};
 
 pub const LANG_EN: u32 = 0;
-pub const LANG_JA: u32 = 1;
+pub const LANG_JP: u32 = 1;
 
 pub fn lang_id(name: &str) -> Option<u32> {
     match name {
         "en" => Some(LANG_EN),
-        "ja" => Some(LANG_JA),
+        "jp" => Some(LANG_JP),
         _ => None,
     }
 }
 
 pub fn default_langs(direction: &str) -> (Option<u32>, Option<u32>) {
     match direction {
-        "ja-en" => (Some(LANG_JA), Some(LANG_EN)),
-        "en-ja" => (Some(LANG_EN), Some(LANG_JA)),
+        "jp-en" => (Some(LANG_JP), Some(LANG_EN)),
+        "en-jp" => (Some(LANG_EN), Some(LANG_JP)),
         _ => (None, None),
     }
 }

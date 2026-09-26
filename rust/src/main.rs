@@ -54,7 +54,7 @@ enum Command {
         tokenizer: PathBuf,
         #[arg(long, default_value = "train")]
         split: String,
-        #[arg(long, default_value = "en-ja")]
+        #[arg(long, default_value = "en-jp")]
         direction: String,
         #[arg(long, default_value_t = 64)]
         seq_len: usize,

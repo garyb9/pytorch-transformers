@@ -81,7 +81,7 @@ class DataConfig:
     own_dev_fraction: float = 0.0007
     own_test_fraction: float = 0.0007
     canonical_src_lang: str = "en"
-    canonical_tgt_lang: str = "ja"
+    canonical_tgt_lang: str = "jp"
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> DataConfig:

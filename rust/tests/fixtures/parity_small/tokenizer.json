@@ -50,7 +50,7 @@
     },
     {
       "id": 5,
-      "content": "<2ja>",
+      "content": "<2jp>",
       "single_word": false,
       "lstrip": false,
       "rstrip": false,
@@ -87,7 +87,7 @@
       "[BOS]": 2,
       "[EOS]": 3,
       "<2en>": 4,
-      "<2ja>": 5,
+      "<2jp>": 5,
       "a": 6,
       "b": 7,
       "c": 8,

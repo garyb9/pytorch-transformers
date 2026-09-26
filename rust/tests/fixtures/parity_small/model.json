@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "direction": "en-ja",
+  "direction": "en-jp",
   "tokenizer_sha256": null,
   "src_vocab_size": 172,
   "tgt_vocab_size": 172,

@@ -24,10 +24,10 @@ def content_ids(tokens: Sequence[int], tokenizer: TokenizerWrapper) -> list[int]
 
 
 def lang_ids_for(direction: str) -> tuple[int | None, int | None]:
-    if direction == "ja-en":
-        return LANG_IDS["ja"], LANG_IDS["en"]
-    if direction == "en-ja":
-        return LANG_IDS["en"], LANG_IDS["ja"]
+    if direction == "jp-en":
+        return LANG_IDS["jp"], LANG_IDS["en"]
+    if direction == "en-jp":
+        return LANG_IDS["en"], LANG_IDS["jp"]
     return None, None
 
 
@@ -166,7 +166,7 @@ def translate_text(
     device: torch.device,
     max_len: int = 256,
     beam: int = 1,
-    direction: str = "en-ja",
+    direction: str = "en-jp",
 ) -> str:
     source_ids = tokenizer.encode(normalize(text))
     if not source_ids:

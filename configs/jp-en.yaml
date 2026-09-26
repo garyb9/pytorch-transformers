@@ -1,8 +1,8 @@
-direction: en-ja
+direction: jp-en
 data_dir: data/opus_jesc
 tokenizer_path: tokenizer_shared.json
 model_folder: weights
-run_name: en-ja
+run_name: jp-en
 seq_len: 256
 batch_size: 32
 num_epochs: 20

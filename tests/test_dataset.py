@@ -72,8 +72,8 @@ def test_padding_and_special_tokens(tmp_path, tokenizer: TokenizerWrapper) -> No
 def test_direction_swaps_encoder_and_decoder(tmp_path, tokenizer: TokenizerWrapper) -> None:
     shard = tmp_path / "train-00000.jsonl"
     write_shard(shard, tokenizer, [("hello world", "こんにちは世界")])
-    forward = TranslationDataset([shard], tokenizer, seq_len=16, direction="en-ja")[0]
-    backward = TranslationDataset([shard], tokenizer, seq_len=16, direction="ja-en")[0]
+    forward = TranslationDataset([shard], tokenizer, seq_len=16, direction="en-jp")[0]
+    backward = TranslationDataset([shard], tokenizer, seq_len=16, direction="jp-en")[0]
     assert forward["encoder_input"][1].item() == tokenizer.encode("hello world")[0]
     assert backward["encoder_input"][1].item() == tokenizer.encode("こんにちは世界")[0]
 
@@ -86,17 +86,17 @@ def test_invalid_direction_rejected(tmp_path, tokenizer: TokenizerWrapper) -> No
 
 
 def test_directions_constant() -> None:
-    assert DIRECTIONS == ("en-ja", "ja-en", "mixed")
+    assert DIRECTIONS == ("en-jp", "jp-en", "mixed")
 
 
 def test_lang_ids_reflect_direction(tmp_path, tokenizer: TokenizerWrapper) -> None:
     shard = tmp_path / "train-00000.jsonl"
     write_shard(shard, tokenizer, [("hello world", "こんにちは世界")])
-    forward = TranslationDataset([shard], tokenizer, seq_len=16, direction="en-ja")[0]
-    backward = TranslationDataset([shard], tokenizer, seq_len=16, direction="ja-en")[0]
+    forward = TranslationDataset([shard], tokenizer, seq_len=16, direction="en-jp")[0]
+    backward = TranslationDataset([shard], tokenizer, seq_len=16, direction="jp-en")[0]
     assert forward["src_lang_id"].item() == LANG_IDS["en"]
-    assert forward["tgt_lang_id"].item() == LANG_IDS["ja"]
-    assert backward["src_lang_id"].item() == LANG_IDS["ja"]
+    assert forward["tgt_lang_id"].item() == LANG_IDS["jp"]
+    assert backward["src_lang_id"].item() == LANG_IDS["jp"]
     assert backward["tgt_lang_id"].item() == LANG_IDS["en"]
 
 
@@ -105,4 +105,4 @@ def test_mixed_direction_uses_both_orientations(tmp_path, tokenizer: TokenizerWr
     write_shard(shard, tokenizer, [(f"hello world {i}", f"こんにちは {i}") for i in range(12)])
     dataset = TranslationDataset([shard], tokenizer, seq_len=16, direction="mixed")
     source_langs = {item["src_lang_id"].item() for item in dataset}
-    assert source_langs == {LANG_IDS["en"], LANG_IDS["ja"]}
+    assert source_langs == {LANG_IDS["en"], LANG_IDS["jp"]}

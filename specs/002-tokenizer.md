@@ -6,7 +6,7 @@
   `tokenizers` crate (Rust) — the *same* implementation family in both languages.
 - **FR-TOK-2** Vocab size 32k (configurable). Special tokens, fixed ids:
   `[PAD]=0`, `[UNK]=1`, `[BOS]=2`, `[EOS]=3`. Reserved for future mixed-direction mode:
-  `<2en>=4`, `<2ja>=5` (trained in, unused by default).
+  `<2en>=4`, `<2jp>=5` (trained in, unused by default).
 - **FR-TOK-3** Trained on a seeded sample of the union of sources (both languages) so the
   pair shares one vocabulary.
 - **FR-TOK-4** Persisted as `tokenizer.json`; its SHA-256 is recorded in every manifest,

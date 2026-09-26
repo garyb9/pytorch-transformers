@@ -24,7 +24,7 @@ implemented twice: Python (reference) and Rust/candle (systems).
 ## Scope
 
 - Training a Transformer encoder–decoder for EN↔JP translation.
-- Two direction configs now (`en-ja`, `ja-en`); mixed-direction is plumbed but disabled.
+- Direction configs `en-jp`, `jp-en`, and `mixed` (shared language embeddings).
 - Evaluation, greedy/beam inference, checkpoint export, Python↔Rust parity and benchmarks.
 
 ## Non-goals

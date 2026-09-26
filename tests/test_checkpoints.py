@@ -40,12 +40,12 @@ def random_batch(config: ModelConfig):
 def test_export_keys_match_contract_untied(tmp_path) -> None:
     config = small_config()
     model = build_transformer(config)
-    payload = export_safetensors(model, tmp_path / "model.safetensors", config, "en-ja")
+    payload = export_safetensors(model, tmp_path / "model.safetensors", config, "en-jp")
     from safetensors.torch import load_file
 
     saved = set(load_file(str(tmp_path / "model.safetensors")))
     assert saved == expected_keys(config)
-    assert payload["direction"] == "en-ja"
+    assert payload["direction"] == "en-jp"
     assert payload["format"] == 1
 
 
@@ -53,10 +53,10 @@ def test_export_and_reload_produces_same_logits(tmp_path) -> None:
     config = small_config()
     model = build_transformer(config).eval()
     path = tmp_path / "model.safetensors"
-    export_safetensors(model, path, config, "en-ja")
-    reloaded, payload = load_model(path, direction="en-ja")
+    export_safetensors(model, path, config, "en-jp")
+    reloaded, payload = load_model(path, direction="en-jp")
     reloaded.eval()
-    assert payload["direction"] == "en-ja"
+    assert payload["direction"] == "en-jp"
 
     src, tgt, src_mask, tgt_mask = random_batch(config)
     with torch.no_grad():
@@ -69,7 +69,7 @@ def test_tied_embeddings_export_and_reload(tmp_path) -> None:
     config = small_config(tie_embeddings=True)
     model = build_transformer(config).eval()
     path = tmp_path / "tied.safetensors"
-    export_safetensors(model, path, config, "en-ja")
+    export_safetensors(model, path, config, "en-jp")
 
     from safetensors.torch import load_file
 
@@ -118,7 +118,7 @@ def test_training_checkpoint_roundtrip(tmp_path) -> None:
     metadata = {
         "epoch": 3,
         "global_step": 42,
-        "direction": "ja-en",
+        "direction": "jp-en",
         "tie_embeddings": False,
         "tokenizer_sha256": "abc",
     }
@@ -134,9 +134,9 @@ def test_direction_mismatch_is_rejected(tmp_path) -> None:
     config = small_config()
     model = build_transformer(config)
     path = tmp_path / "model.safetensors"
-    export_safetensors(model, path, config, "en-ja")
+    export_safetensors(model, path, config, "en-jp")
     try:
-        load_model(path, direction="ja-en")
+        load_model(path, direction="jp-en")
     except ValueError as error:
         assert "direction" in str(error)
     else:

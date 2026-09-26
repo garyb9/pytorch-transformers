@@ -121,7 +121,7 @@ def translate_command(
     tokenizer = TokenizerWrapper.from_file(tokenizer_file)
     resolved = resolve_device(device)
     model.to(resolved).eval()
-    active_direction = direction or str(metadata.get("direction", "en-ja"))
+    active_direction = direction or str(metadata.get("direction", "en-jp"))
 
     if file is not None:
         lines = file.read_text(encoding="utf-8").splitlines()

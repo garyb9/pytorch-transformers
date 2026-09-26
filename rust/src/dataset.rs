@@ -45,7 +45,7 @@ impl TranslationDataset {
                     continue;
                 }
                 let record: Record = serde_json::from_str(line)?;
-                let (src, tgt) = if direction == "ja-en" {
+                let (src, tgt) = if direction == "jp-en" {
                     (record.tgt, record.src)
                 } else {
                     (record.src, record.tgt)

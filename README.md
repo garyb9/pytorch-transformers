@@ -51,14 +51,14 @@ ptx train-tokenizer configs/data.yaml --out tokenizer_shared.json
 ptx prepare-data configs/data.yaml --tokenizer tokenizer_shared.json --out data/opus_jesc
 
 # 3. train a direction
-ptx train configs/en-ja.yaml --device auto
+ptx train configs/en-jp.yaml --device auto
 
 # 4. evaluate / translate
-ptx eval weights/en-ja --split jesc-own-test --beam 4
-ptx translate weights/en-ja --text "Hello, how are you?"
+ptx eval weights/en-jp --split jesc-own-test --beam 4
+ptx translate weights/en-jp --text "Hello, how are you?"
 
 # 5. export flat safetensors for the Rust port
-ptx export weights/en-ja --out model.safetensors
+ptx export weights/en-jp --out model.safetensors
 ```
 
 For a fast smoke run, use `configs/dev.yaml` and `--max-examples 2000` on `prepare-data`.
@@ -114,7 +114,7 @@ cd rust && cargo fmt && cargo clippy --all-targets -- -D warnings && cargo test
 ## Status / roadmap
 
 - Done: model, tokenizer, streaming two-source data, training, evaluation, CLI, Rust inference (greedy + beam) and training (dropout, warmup + inverse-sqrt LR), mixed-direction language embeddings, parity + benchmark.
-- Supported directions: `en-ja`, `ja-en`, and `mixed` (one model, language embeddings). Train mixed with `configs/mixed.yaml`, then evaluate a direction with `ptx eval ... --direction en-ja|ja-en`.
+- Supported directions: `en-jp`, `jp-en`, and `mixed` (one model, language embeddings). Train mixed with `configs/mixed.yaml`, then evaluate a direction with `ptx eval ... --direction en-jp|jp-en`.
 - Planned: full-corpus throughput tuning, Rust `--dtype bf16` option, fp16 `GradScaler` on Python.
 
 ## License

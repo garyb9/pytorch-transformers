@@ -23,7 +23,7 @@ def evaluate(
     direction: str | None = None,
 ) -> dict[str, Any]:
     model, metadata, model_config = load_run_dir(run_dir)
-    training_direction = str(metadata.get("direction", "en-ja"))
+    training_direction = str(metadata.get("direction", "en-jp"))
     eval_direction = direction or training_direction
     tokenizer_file = tokenizer_path or metadata.get("tokenizer_path") or "tokenizer_shared.json"
     tokenizer = TokenizerWrapper.from_file(tokenizer_file)

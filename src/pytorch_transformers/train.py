@@ -25,11 +25,11 @@ logger = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class TrainConfig:
-    direction: str = "en-ja"
+    direction: str = "en-jp"
     data_dir: str = "data/opus_jesc"
     tokenizer_path: str = "tokenizer_shared.json"
     model_folder: str = "weights"
-    run_name: str = "en-ja"
+    run_name: str = "en-jp"
     seq_len: int = 256
     batch_size: int = 32
     num_epochs: int = 20

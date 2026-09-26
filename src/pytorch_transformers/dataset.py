@@ -11,8 +11,8 @@ from torch.utils.data import Dataset
 
 from .tokenizer import TokenizerWrapper
 
-DIRECTIONS = ("en-ja", "ja-en", "mixed")
-LANG_IDS = {"en": 0, "ja": 1}
+DIRECTIONS = ("en-jp", "jp-en", "mixed")
+LANG_IDS = {"en": 0, "jp": 1}
 
 
 def causal_mask(size: int) -> torch.Tensor:
@@ -30,7 +30,7 @@ class TranslationDataset(Dataset[dict[str, torch.Tensor]]):
         shards: Sequence[str | Path],
         tokenizer: TokenizerWrapper,
         seq_len: int,
-        direction: str = "en-ja",
+        direction: str = "en-jp",
         seed: int = 42,
     ) -> None:
         if direction not in DIRECTIONS:
@@ -67,17 +67,17 @@ class TranslationDataset(Dataset[dict[str, torch.Tensor]]):
         record = self._load(index)
         src_ids = list(record["src"])
         tgt_ids = list(record["tgt"])
-        if self.direction == "ja-en":
+        if self.direction == "jp-en":
             src_ids, tgt_ids = tgt_ids, src_ids
-            src_lang, tgt_lang = LANG_IDS["ja"], LANG_IDS["en"]
+            src_lang, tgt_lang = LANG_IDS["jp"], LANG_IDS["en"]
         elif self.direction == "mixed":
-            en_to_ja = mixed_orientation(int(record.get("pair_id", index)), self.seed)
-            if not en_to_ja:
+            en_to_jp = mixed_orientation(int(record.get("pair_id", index)), self.seed)
+            if not en_to_jp:
                 src_ids, tgt_ids = tgt_ids, src_ids
-            src_lang = LANG_IDS["en"] if en_to_ja else LANG_IDS["ja"]
-            tgt_lang = LANG_IDS["ja"] if en_to_ja else LANG_IDS["en"]
+            src_lang = LANG_IDS["en"] if en_to_jp else LANG_IDS["jp"]
+            tgt_lang = LANG_IDS["jp"] if en_to_jp else LANG_IDS["en"]
         else:
-            src_lang, tgt_lang = LANG_IDS["en"], LANG_IDS["ja"]
+            src_lang, tgt_lang = LANG_IDS["en"], LANG_IDS["jp"]
 
         pad = self.tokenizer.pad_id
         bos = self.tokenizer.bos_id
