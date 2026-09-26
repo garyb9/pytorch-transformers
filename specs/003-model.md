@@ -31,8 +31,8 @@ Reference: Vaswani et al., 2017. Modules are hand-written; no HF model classes.
 - **FR-MODEL-7** `build_transformer(config)`: assembles N encoder/decoder blocks,
   Xavier-uniform init for `dim>1`, returns model + logs parameter count.
 - **FR-MODEL-8** Optional hooks, off by default: `tie_embeddings` (share src/tgt/proj
-  weights if vocab matches) and `lang_embedding` (adds learned language vector; reserved
-  for `mixed` direction).
+  weights if vocab matches) and `lang_embedding` (adds a learned per-language vector; used
+  by the `mixed` direction).
 
 ## Tensor contract
 

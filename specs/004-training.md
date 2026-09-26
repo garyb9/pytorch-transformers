@@ -26,8 +26,7 @@
   seeding. Optional `--deterministic` for strict algorithms.
 - **FR-TRAIN-9** Data loading: `num_workers`, `pin_memory`, `persistent_workers`,
   prefetch; tokens/sec counter from the actual `(B, S+T)` consumed.
-- **FR-TRAIN-10** `direction: mixed` is parsed but raises `NotImplementedError` until the
-  language-embedding mode ships.
+- **FR-TRAIN-10** `direction: mixed` trains a single model over both orientations using language embeddings (`lang_embedding: true`). At eval time, select a direction with `--direction en-ja|ja-en`.
 
 ## Acceptance
 

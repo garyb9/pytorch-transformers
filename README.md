@@ -14,7 +14,7 @@ Both stacks share one tokenizer (`tokenizer.json`) and one weight format (`safet
 - Paper-faithful encoder–decoder with multi-head attention, sinusoidal positional encodings, and configurable post-/pre-norm.
 - Shared byte-level BPE tokenizer (works for Japanese without whitespace assumptions).
 - Two-source data pipeline: **JESC** (conversational subtitles) and **OPUS-100** (mixed domain), with deterministic mixing, filtering, dedup, decontamination, and dual-track evaluation.
-- Directional configs for **EN→JA** and **JA→EN** (mixed-direction mode is reserved for later).
+- Directional configs for **EN→JA**, **JA→EN**, and a **mixed** direction model using shared language embeddings.
 - Training with warmup + inverse-sqrt LR, label smoothing, AMP, gradient clipping, resume, and best/last checkpoints.
 - Greedy and beam-search decoding; BLEU and chrF evaluation.
 - `safetensors` export with a frozen key contract for Python ↔ Rust interop.
@@ -113,9 +113,9 @@ cd rust && cargo fmt && cargo clippy --all-targets -- -D warnings && cargo test
 
 ## Status / roadmap
 
-- Done: model, tokenizer, two-source data, training, evaluation, CLI, Rust inference + training (with warmup + inverse-sqrt LR), parity + benchmark.
-- Reserved: mixed-direction model (shared vocab and language tags are already in place).
-- Planned: streaming `prepare-data` for full-corpus runs, Rust dropout parity, beam search in Rust.
+- Done: model, tokenizer, streaming two-source data, training, evaluation, CLI, Rust inference (greedy + beam) and training (dropout, warmup + inverse-sqrt LR), mixed-direction language embeddings, parity + benchmark.
+- Supported directions: `en-ja`, `ja-en`, and `mixed` (one model, language embeddings). Train mixed with `configs/mixed.yaml`, then evaluate a direction with `ptx eval ... --direction en-ja|ja-en`.
+- Planned: full-corpus throughput tuning, Rust `--dtype bf16` option, fp16 `GradScaler` on Python.
 
 ## License
 

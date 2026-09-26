@@ -43,7 +43,8 @@ count). Official dev/test are used as an **external benchmark only**.
 
 ## Non-functional
 
-- **NFR-DATA-1** `prepare-data` streams; memory use independent of corpus size.
+- **NFR-DATA-1** `prepare-data` streams: only eval sets, dedup hashes, and the output buffer
+  are held in memory; training examples are emitted as they are produced.
 - **NFR-DATA-2** Byte-identical reruns for a fixed seed and source revisions.
 
 ## Acceptance
